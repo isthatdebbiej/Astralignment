@@ -1,0 +1,14 @@
+# Replace the example hostname with your owned hostname after DNS points to the host.
+astra.example.com {
+  encode zstd gzip
+  @gateway path /api/* /ws/*
+  reverse_proxy @gateway 127.0.0.1:8787
+  root * /opt/astra/dist
+  try_files {path} /index.html
+  file_server
+  header {
+    Referrer-Policy "no-referrer"
+    Permissions-Policy "camera=(self), microphone=()"
+    X-Content-Type-Options "nosniff"
+  }
+}

@@ -1,0 +1,17 @@
+[Unit]
+Description=Astralignment gateway
+After=network-online.target
+[Service]
+Type=simple
+User=astra
+WorkingDirectory=/opt/astra
+EnvironmentFile=/etc/astra/gateway.env
+ExecStart=/usr/bin/node --import tsx gateway/index.ts
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/astra/artifacts
+[Install]
+WantedBy=multi-user.target

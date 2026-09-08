@@ -1,0 +1,6 @@
+* text=auto eol=lf
+# Preserve upstream byte hashes across Windows and Linux checkouts.
+sim/models/unitree_g1/** -text
+sim/models/unitree_g1/policy-config.yaml whitespace=-blank-at-eol
+*.STL binary
+*.pt binary
