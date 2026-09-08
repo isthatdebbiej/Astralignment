@@ -1,18 +1,28 @@
 # Astralignment
 
-**Test whether robot coordination respects the person sharing the space.**
+**A human–agent–robot evaluation workbench for testing whether an agent's assurance is supported by the physical state.**
 
-A person asks two robots to cross a stage and leave an access corridor clear. Each robot can walk to its destination. Together, they can still collide, enter the corridor, or wait for each other until neither finishes.
+An agent's statement can change what a person does next. If the agent says a robot has secured an object, a person may remove the support beneath it. The relevant question is not whether the explanation sounds reasonable, but whether the object remains supported after the person acts.
 
-Astralignment reproduces these failures in simulation and gives GPT-6 Astra the evidence needed to write a different coordinator. The new code runs from the same saved starting state. A separate evaluator checks whether both robots finish without violating the specified constraints. The developer can inspect the code, replay the motion, and test the unchanged program on different starts.
+Astralignment is being developed for robotics, embodied-AI, and alignment researchers evaluating policies under human reliance. The target is not dexterity. It is the coordination boundary between perception, policy execution, verification, and human action.
 
-The workspace combines two simulated Unitree G1 humanoids, real camera video, and an executable repair loop. The person specifies and confirms the constraints; Astra writes coordination software; MuJoCo exposes its physical consequences. No physical robot is controlled.
+The current implementation provides two simulated Unitree G1 humanoids, MuJoCo checkpoint forks, independent coordination checks, an Astra repair loop, real-video overlays, and durable JSON/MCAP experiment records. It tests crossing and right-of-way failures. No physical robot is controlled. **Object handoff, counterfactual human interventions, and an assurance commitment gate are the next evaluation task, not implemented capabilities of this release.**
 
-The research question is specific: **can model-generated coordination code preserve a human-defined boundary while completing a shared task, and does the repair survive changes to the starting conditions?**
+The research question is: **when an agent says a physical task is complete, does that claim remain valid under the human action it invites?** The existing coordination experiments supply the checkpointing, execution, verification, and recording infrastructure for testing that question.
 
 [Get started](#get-started) · [What Astra does](#what-astra-does) · [Generated data](#what-data-does-this-produce) · [Architecture](#architecture-and-real-time-challenges)
 
-## The problem: capable agents can still fail as a team
+## Evaluation task: a handoff under human reliance
+
+The planned task has three participants: a robot secures an object, an agent says external support can be removed, and a human acts on that claim. At the assurance point, the workbench will fork the simulator and execute counterfactual human actions: removing support immediately, delaying removal, or changing the direction of an intervention. The verifier will check whether the object remains supported and whether the stated completion conditions hold.
+
+A **false-success state** is one in which the agent reports completion but a permitted human response exposes an unmet physical condition. Recording only the state before support removal can miss this failure. The proposed test records the assurance, its supporting evidence, the intervention, and the resulting trajectory.
+
+An application-level **commitment gate** is planned to block assurances when verification is missing, stale, or failed. Evidence must identify the claim, physical state, policy version, checked intervention, and validity conditions. A result from a different state or a weaker test cannot authorize the assurance. The current episode/source checks prevent some stale coordination results from being reused; they are not yet this handoff gate.
+
+Actor, verifier, and failure-mining responsibilities must remain separate. Today, generated coordination code runs in a bounded sandbox and cannot edit the independent evaluator; failure search is a separate gateway operation. The handoff extension will retain that separation so an explanation cannot change the evidence used to judge it.
+
+## Current experiment: two robots sharing a constrained space
 
 “Reach your destination” is an individual objective. “Both of you finish, without colliding or blocking the person using this space” is a shared objective with constraints.
 
@@ -49,6 +59,10 @@ The value is the connection between **human intent, a concrete failure, a code c
 
 ## What Astra does
 
+Astra serves as a structured coordinator and test investigator, not only a code generator. It receives measured failure evidence, proposes executable coordination changes, tests them through bounded tools, and inspects the results before submitting a candidate. Typed action validation and an independent evaluator separate what it proposes from what the simulator accepts and measures.
+
+The intended extension is to let Astra propose bounded scenario mutations and investigate handoff failures. In this release, scenario mutations are generated by seeded application code, not by Astra. Repair and evaluation records can be retained as regression cases; an automated corpus-wide regression runner is still pending.
+
 The gateway uses `gpt-6-astra` through the OpenAI Responses API with function calling. See the [official model documentation](https://developers.openai.com/api/docs/models/gpt-6-astra) for capabilities and account-dependent access.
 
 1. **Inspect:** `inspect_failure` exposes the scene, measured feedback, recent events, and closest-approach robot state.
@@ -69,7 +83,9 @@ The new **Start spatial tracking** action explicitly asks permission to send sel
 
 Automatic projection uses an **estimated metric** floor and camera pose anchored to an initial view, with a limited frame context. It is not full SLAM, a persistent room map, arbitrary 3D reconstruction, automatic human detection, or real-object occlusion. Lost, stale or invalid geometry withholds the robot projection instead of extrapolating a pose. Reacquiring a substantially different view may require restarting spatial tracking. The real video remains unchanged beneath the virtual robots.
 
-Advanced manual calibration remains available: identify four corners of a measured floor rectangle and adjust the estimated pinhole lens. Confirmed obstacle annotations become collision boxes. Keep the camera fixed in this manual mode; read the [projection assumptions](docs/CAMERA_PROJECTION.md) before interpreting spatial accuracy. The automatic worker integration is implemented in source; its deployment and end-to-end desktop/iPhone verification remain pending until separately reported. Earlier synthetic fixed-camera overlay tests do not verify automatic handheld tracking.
+The Modal L4 worker and Vultr connection have been deployed. Real-image inference and a repeated indoor-image projection check have passed; neither establishes moving-camera accuracy. The floor selector uses geometric plane fitting, not semantic floor recognition: a tabletop can be selected as the floor. Furniture is not automatically converted into collision geometry. These limitations matter when interpreting the overlay.
+
+Advanced manual calibration remains available: identify four corners of a measured floor rectangle and adjust the estimated pinhole lens. Confirmed obstacle annotations become collision boxes. Keep the camera fixed in this manual mode; read the [projection assumptions](docs/CAMERA_PROJECTION.md) before interpreting spatial accuracy. Earlier synthetic fixed-camera overlay tests do not verify automatic handheld tracking.
 
 ## Architecture and real-time challenges
 
@@ -110,7 +126,7 @@ The implemented archive is stored under `runtime/experiments` and exposed in **E
 
 MCAP exports use custom JSON-schema channels `/astralignment/experiment` and `/astralignment/trajectory`. They preserve full trajectory arrays as indexed messages alongside experiment metadata; they are **not ROS messages or a ROS-compatible bag profile**. Timestamps use relative simulation time where available, otherwise sequence order—not camera wall-clock recording times.
 
-Default limits are **128 MiB per record, 2 GiB for the archive and 2,000 records**. Limit failures are explicit; records and frames are not silently truncated or evicted to fit. This is local durable storage, not an off-host backup. There is no automatic recovery of historical runs that were never recorded, and exporting a checkpoint does not by itself implement cross-restart checkpoint import or guarantee replay across changed runtime versions. Archive deployment and export verification must be reported separately from implementation.
+Default limits are **128 MiB per record, 2 GiB for the archive and 2,000 records**. Limit failures are explicit; records and frames are not silently truncated or evicted to fit. This is local durable storage, not an off-host backup. There is no automatic recovery of historical runs that were never recorded, and exporting a checkpoint does not by itself implement cross-restart checkpoint import or guarantee replay across changed runtime versions. A deployed isolated baseline check retained 26 trajectory frames and a full checkpoint; archive readback and a desktop MCAP download were verified.
 
 ### How the data can improve Astra's behavior
 
@@ -136,6 +152,15 @@ To test whether accumulated examples help Astra, compare the same model and tool
 The archive/export layer supplies records for such a corpus, but reproducibility checks, dataset splits, label review and study design still require deliberate work. An evaluator can consistently reward the wrong specification. No automatic retrieval into later repairs, model-weight training, corpus publication or off-host backup is performed by the current application.
 
 The intended contribution is a testable connection between **what the person required, what the controller did, what Astra changed, and whether the change held up**. That can support narrower, measurable reductions in coordination failures. It cannot, on its own, establish that Astra understands every human preference or is generally aligned.
+
+## Next research steps
+
+1. Implement the object-handoff task, explicit assurances, counterfactual human interventions, and commitment gate described above.
+2. Add location-conditioned locomotion-policy training for navigation and placement across varied scene geometries. This is separate from training grasp or contact-control policies for securing an object.
+3. Randomize object position, support geometry, visibility, timing, and human interventions while retaining reproducible seeds, initial checkpoints, and evaluator versions.
+4. Use failure and recovery trajectories for policy evaluation, regression testing, and curated training-data generation. Review labels and keep evaluation scene families separate from training and retrieval data.
+
+The current release uses a pretrained walking policy. It does not train locomotion, update Astra's weights, or establish that recorded failures improve a model without a separate evaluation.
 
 ## Get started
 
@@ -193,7 +218,7 @@ Open `http://localhost:5173`. For local loopback use, leave `PUBLIC_ORIGIN` unse
 
 ### Your first experiment
 
-1. Choose **World** to begin without a camera, or **Setup → Camera** to pair a phone and confirm floor calibration.
+1. Choose **World** to begin without a camera, or **Setup → Camera** to pair a phone, then **Start spatial tracking** in the live view. Start with the actual floor visible; manual corner calibration is optional.
 2. Set the mission in **Setup → Mission**. Editing this text alone does not change physical geometry or previous evidence.
 3. Run the baseline or **Find counterexample**. Inspect the measured result in **Evidence**.
 4. Select **Repair with Astra** when a current counterexample and funded access are available. Inspect the patch in **Code** and tool activity in **Trace**.

@@ -115,3 +115,27 @@ status/geometry diagnostics. Supplying up to four sequential camera JPEGs
 tests their actual model-estimated poses. This does not substitute for live
 device QA, and `searching` is a valid failure to establish geometry, not a pass
 for overlay alignment.
+
+### Deployed-model smoke, 2026-09-08 UTC
+
+The actual Modal L4 service processed the public
+[Open3D SUN RGB-D corridor photograph](https://github.com/isl-org/open3d_downloads/releases/download/20220201-data/SampleSUNRGBDImage.zip)
+(`SUN_color.jpg`, described in the
+[official RGB-D tutorial](https://www.open3d.org/docs/latest/tutorial/geometry/rgbd_image.html)).
+Only its RGB photograph was supplied; no dataset depth, camera calibration,
+floor mask or pose was supplied to the engine. The downloaded sample remains
+temporary test input, not an application asset.
+
+- Frame 0: `searching`, floor candidate inlier ratio **0.419708**, 233 ms inference.
+- Frame 1, repeated same photograph: `tracking`, **1,181** image matches,
+  **0.754712 px** median reprojection error, 273 ms inference, a 16-value
+  projection, and `estimated_metric` scale.
+
+No thresholds or geometry were changed to obtain this result. The earlier
+public outdoor-road example did not establish a supported plane. An Open3D
+Redwood rendered living-room sample was also rejected by the refined-floor
+checks. These rejections were retained, not represented as calibration.
+The positive result proves actual pretrained-model inference through floor
+fitting and projection on a real indoor photograph. Repeating a still tests
+stationary consistency only: **moving-camera, live iPhone, absolute metric
+accuracy and robot-overlay alignment are not verified by this smoke**.

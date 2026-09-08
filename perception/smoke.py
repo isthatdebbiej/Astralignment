@@ -7,6 +7,7 @@ import argparse
 import base64
 import io
 import json
+import math
 import os
 import time
 from urllib.parse import urlsplit
@@ -50,6 +51,8 @@ def main():
         print(json.dumps(summary, allow_nan=False))
         if result["status"] == "tracking":
             assert len(result["world_to_clip"]) == 16
+            assert all(isinstance(value, (int, float)) and math.isfinite(value)
+                       for value in result["world_to_clip"])
 
 
 if __name__ == "__main__":
