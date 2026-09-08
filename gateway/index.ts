@@ -99,6 +99,14 @@ app.get('/api/health',async(_req,res)=>{
 app.get('/api/artifacts',(_req,res)=>res.json({artifacts:[...artifacts.values()].reverse()}));
 app.get('/api/events',(_req,res)=>res.json({events:eventHistory}));
 app.get('/api/controller',async(_req,res)=>res.json(await sim('/controller')));
+// DimOS is a separate native robotics service, never loaded into the policy runtime.
+for (const endpoint of ['health', 'state'] as const) app.get(`/api/dimos/${endpoint}`, async (_req,res) => {
+  if (!process.env.DIMOS_URL) return res.status(503).json({ok:false,error:'DimOS service is not configured'});
+  try {
+    const response = await fetch(`${process.env.DIMOS_URL}/${endpoint}`, {signal:AbortSignal.timeout(3000)});
+    return res.status(response.status).json(await response.json());
+  } catch { return res.status(503).json({ok:false,error:'DimOS service is unavailable'}); }
+});
 app.post('/api/probe',async(_req,res)=>res.json(await exclusive('Astra access check',()=>probeAstra())));
 app.post('/api/observe',async(req,res)=>{
   const input=observationInput.parse(req.body);

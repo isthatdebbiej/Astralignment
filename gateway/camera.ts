@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import type { Server } from 'node:http';
 import type { Express } from 'express';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -6,6 +6,13 @@ import type { CameraCalibration } from '../contracts/index.js';
 
 type Session = { expires: number; origin: string; phone?: WebSocket; viewer?: WebSocket };
 const TTL = 30 * 60_000;
+export function ephemeralTurnCredentials(secret:string,urls:string[],sessionExpires:number,now=Date.now()) {
+  if(!secret||!urls.length||urls.some(url=>!/^turns?:[^\s]+$/i.test(url)))throw new Error('TURN secret and valid TURN URLs required');
+  const expires=Math.floor(Math.min(sessionExpires,now+TTL)/1000);
+  if(expires<=Math.floor(now/1000))throw new Error('Pairing expired');
+  const username=`${expires}:${randomBytes(8).toString('hex')}`;
+  return {urls,username,credential:createHmac('sha1',secret).update(username).digest('base64'),credentialType:'password' as const};
+}
 export function validSignal(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
@@ -52,6 +59,15 @@ export function registerCamera(app: Express, server: Server, options: { onCalibr
     if (!session || session.expires <= Date.now() || origin !== session.origin) return res.status(403).json({ error: 'Valid same-origin pairing required' });
     let iceServers: unknown[] = [];
     try { iceServers = JSON.parse(process.env.CAMERA_ICE_SERVERS || '[]'); } catch { /* empty is explicit LAN only */ }
+    if(!Array.isArray(iceServers))iceServers=[];
+    if(process.env.CAMERA_TURN_SECRET&&process.env.CAMERA_TURN_URLS){
+      try {
+        const raw=process.env.CAMERA_TURN_URLS.trim();
+        const urls=raw.startsWith('[')?JSON.parse(raw):raw.split(',').map(url=>url.trim()).filter(Boolean);
+        if(!Array.isArray(urls)||urls.some(url=>typeof url!=='string'))throw new Error('Invalid TURN URLs');
+        iceServers.push(ephemeralTurnCredentials(process.env.CAMERA_TURN_SECRET,urls,session.expires));
+      }catch{return res.status(503).json({error:'TURN configuration is invalid; contact the operator'});}
+    }
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ iceServers, warning: iceServers.length ? 'STUN alone cannot connect every network. Configure TURN for reliable remote access.' : 'LAN only: no STUN/TURN configured.' });
   });

@@ -1,6 +1,56 @@
-# Ubuntu 24.04 deployment template
+# Vultr Docker deployment
 
-Templates only: no host has been provisioned and no iPhone test has been performed.
+The live deployment uses Docker Compose on Ubuntu 24.04 at
+`https://astralignment.64.177.14.149.sslip.io`. The hostname uses public automatic
+DNS; no purchased domain is required. A trusted Let's Encrypt certificate was
+issued and the public endpoint returned HTTP 200 on September 8, 2026.
+
+## Containers and persistence
+
+`compose.yaml` builds separate CPU MuJoCo, Node gateway, and static-web/Caddy
+images. Only Caddy publishes web ports. Gateway and simulation ports stay on the
+private Docker network. The simulator and gateway run as non-root users with
+capabilities dropped. MuJoCo uses the actual CPU TorchScript G1 policy, not a
+render-only robot animation. Browser rendering does not require a server GPU.
+
+Gateway budget/artifact state, simulation artifacts, and TLS certificates use
+named volumes. `docker compose down` preserves these; do not add `--volumes`
+unless intentionally deleting saved state. Secrets belong in
+`/etc/astra/gateway.env`, mode 0600, outside the build context and repository.
+Never run `docker compose config` or inspect container environment into public
+logs: those commands can reveal injected credentials.
+
+DimOS runs separately with one native worker and internal port 8003, exposing
+typed LCM observations without taking control at startup. The gateway exposes
+operator-authenticated read-only `/api/dimos/health` and `/api/dimos/state`.
+The internal command interface is not published on the host. Native observation
+and a labeled command/expiry fixture passed on the deployed container. See
+`sim/DIMOS.md` for details; do not enable native control during an Astra trial.
+
+The Coturn container relays WebRTC media using expiring credentials. Its shared
+secret is stored only in server configuration, never sent to browsers. Open
+3478 TCP/UDP and 49160–49200 UDP for this bounded demo relay. Its host-network
+configuration binds the public interface; private/loopback relay destinations
+are denied. TURN over TCP is supported; TURN-over-TLS is not configured.
+
+```sh
+cd /opt/astra
+docker compose build
+docker compose up -d
+docker compose ps
+docker compose cp deploy/smoke.py sim:/tmp/astra-smoke.py
+docker compose exec -T sim python /tmp/astra-smoke.py
+```
+
+The smoke check verified two robots and matching simulation/model episode
+identity. Phone hardware, real stage calibration, and cellular connectivity
+still require rehearsal. Do not equate healthy containers with completed
+camera-overlay or native DimOS verification.
+
+## Legacy non-container templates
+
+The systemd files below remain unused templates; the deployed host uses Docker.
+No physical iPhone test has been performed.
 
 Use Ubuntu 24.04, Python 3.12, Node 22 and Caddy. Copy the checked-out project to `/opt/astra`. Install Node dependencies with `npm ci`, run `npm run build`, and install `requirements.txt` in `/opt/astra/.venv`. Create an unprivileged `astra` user/group and writable `/opt/astra/artifacts` and `/opt/astra/runtime` owned by that user. Both directories must exist before systemd starts the supplied hardened services. Runtime contains budget/artifact state and must survive service restarts; never publish it.
 

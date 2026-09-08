@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { registerCamera, validCalibration, validSignal } from '../../gateway/camera.js';
+import { ephemeralTurnCredentials, registerCamera, validCalibration, validSignal } from '../../gateway/camera.js';
+import { createHmac } from 'node:crypto';
 import express from 'express';
 import { createServer } from 'node:http';
 import { WebSocket } from 'ws';
@@ -12,6 +13,17 @@ test('camera accepts bounded SDP and ICE messages only', () => {
   assert.equal(validSignal({ type: 'candidate', candidate: { candidate: 'candidate:1' } }), true);
   assert.equal(validSignal({ type: 'stop' }), true);
   for (const value of [null, 'offer', {}, { type: 'eval', code: 'x' }, { type: 'offer', sdp: 4 }, { type: 'answer', sdp: 'x'.repeat(100_000) }, { type: 'candidate', candidate: 'bad' }]) assert.equal(validSignal(value), false);
+});
+test('TURN credentials use expiry HMAC without exposing the shared secret',()=>{
+  const secret='synthetic-coturn-test-secret',now=1_800_000_000_000;
+  const ice=ephemeralTurnCredentials(secret,['turn:relay.example:3478?transport=udp'],now+90_000,now);
+  assert.equal(Number(ice.username.split(':')[0]),Math.floor((now+90_000)/1000));
+  assert.equal(ice.credential,createHmac('sha1',secret).update(ice.username).digest('base64'));
+  assert.equal(JSON.stringify(ice).includes(secret),false);
+  const capped=ephemeralTurnCredentials(secret,['turns:relay.example:5349'],now+99_999_999,now);
+  assert.equal(Number(capped.username.split(':')[0]),Math.floor((now+30*60_000)/1000));
+  assert.throws(()=>ephemeralTurnCredentials(secret,['https://relay.example'],now+90_000,now));
+  assert.throws(()=>ephemeralTurnCredentials(secret,['turn:relay.example'],now,now));
 });
 test('pairing binds origin, rejects expired tokens and signals late join/disconnect', async () => {
   const app = express(), server = createServer(app);

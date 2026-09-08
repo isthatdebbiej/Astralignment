@@ -62,9 +62,11 @@ if availability()["ready"]:
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self._bridge_id = str(uuid.uuid4())
-            self._stop = threading.Event()
+            self._bridge_stop = threading.Event()
             self._guard = threading.RLock()
-            self._thread = None
+            self._bridge_thread = None
+            self._control_enabled = self.config.allow_control
+            self._identity = None
             self._commands = {"g1_a": ([0., 0.], 0.), "g1_b": ([0., 0.], 0.)}
             self._stats = {"bridge_id": self._bridge_id, "version": PINNED_DIMOS_VERSION,
                            "source": "dimos-native", "ticks_published": 0, "commands_received": 0,
@@ -73,19 +75,39 @@ if availability()["ready"]:
 
         @rpc
         def start(self):
-            self._stop.clear()
+            self._bridge_stop.clear()
             super().start()
             self.register_disposable(Disposable(self.g1_a_command.subscribe(lambda msg: self._accept("g1_a", msg))))
             self.register_disposable(Disposable(self.g1_b_command.subscribe(lambda msg: self._accept("g1_b", msg))))
             if self.config.allow_control:
                 http_json(self.config.sim_url, "/run", {"mode": "external"})
-            self._thread = threading.Thread(target=self._poll, name="astra-dimos-bridge", daemon=True)
-            self._thread.start()
+            self._bridge_thread = threading.Thread(target=self._poll, name="astra-dimos-bridge", daemon=True)
+            self._bridge_thread.start()
+
+        @rpc
+        def set_control(self, enabled):
+            """Explicit trusted-operator control admission; never enabled by health checks."""
+            if type(enabled) is not bool:
+                raise ValueError("enabled must be boolean")
+            with self._guard:
+                self._commands = {"g1_a": ([0., 0.], 0.), "g1_b": ([0., 0.], 0.)}
+                if enabled:
+                    state = http_json(self.config.sim_url, "/run", {"mode": "external"})
+                    self._identity = (state["episode_id"], state["scene_epoch"])
+                elif self._control_enabled:
+                    # Revoke locally even when the simulator is unreachable;
+                    # its independent command lease handles the network gap.
+                    self._control_enabled = False
+                    self._stats["control_enabled"] = False
+                    http_json(self.config.sim_url, "/commands", {"commands": {}, "ttl_seconds": .02})
+                self._control_enabled = enabled
+                self._stats["control_enabled"] = enabled
+            return self.status()
 
         def _accept(self, robot_id, message):
             with self._guard:
                 try:
-                    if not self.config.allow_control:
+                    if not self._control_enabled:
                         raise ValueError("Bridge launched in observation-only mode")
                     self._commands[robot_id] = (admitted_twist(message), time.monotonic())
                     self._stats["commands_received"] += 1
@@ -94,10 +116,17 @@ if availability()["ready"]:
                     self._stats["error"] = str(exc)
 
         def _poll(self):
-            while not self._stop.is_set():
+            while not self._bridge_stop.is_set():
                 started = time.monotonic()
                 try:
                     state = http_json(self.config.sim_url, "/state")
+                    with self._guard:
+                        identity = (state["episode_id"], state["scene_epoch"])
+                        if self._identity is not None and identity != self._identity:
+                            self._control_enabled = False
+                            self._stats["control_enabled"] = False
+                            self._commands = {"g1_a": ([0., 0.], 0.), "g1_b": ([0., 0.], 0.)}
+                        self._identity = identity
                     for robot in state["robots"]:
                         w, x, y, z = robot["quaternion"]
                         pose = PoseStamped(frame_id="astra/world", position=robot["position"], orientation=[x, y, z, w])
@@ -110,13 +139,13 @@ if availability()["ready"]:
                         self._stats["error"] = None
                         commands = {rid: velocity if started-received < .3 else [0., 0.]
                                     for rid, (velocity, received) in self._commands.items()}
-                    if self.config.allow_control and not state["paused"] and state["mode"] == "external":
-                        http_json(self.config.sim_url, "/commands", {"commands": commands, "ttl_seconds": .3})
+                        if self._control_enabled and not state["paused"] and state["mode"] == "external":
+                            http_json(self.config.sim_url, "/commands", {"commands": commands, "ttl_seconds": .3})
                     http_json(self.config.sim_url, "/dimos/heartbeat", self.status())
                 except Exception as exc:
                     with self._guard:
                         self._stats["error"] = str(exc)
-                self._stop.wait(max(.005, 1/max(self.config.frequency_hz, 1)-(time.monotonic()-started)))
+                self._bridge_stop.wait(max(.005, 1/max(self.config.frequency_hz, 1)-(time.monotonic()-started)))
 
         @rpc
         def status(self):
@@ -125,10 +154,10 @@ if availability()["ready"]:
 
         @rpc
         def stop(self):
-            self._stop.set()
-            if self._thread:
-                self._thread.join(timeout=3)
-            if self.config.allow_control:
+            self._bridge_stop.set()
+            if self._bridge_thread:
+                self._bridge_thread.join(timeout=3)
+            if self._control_enabled:
                 try:
                     http_json(self.config.sim_url, "/commands", {"commands": {}, "ttl_seconds": .02})
                 except Exception:
@@ -161,7 +190,7 @@ def main():
         bridge = coordinator.deploy(AstralignmentBridge, sim_url=args.sim_url, allow_control=args.allow_control)
         for name, message_type in [("g1_a_pose", PoseStamped), ("g1_b_pose", PoseStamped), ("world_tick", Int32),
                                    ("g1_a_command", Twist), ("g1_b_command", Twist)]:
-            getattr(bridge, name).transport = LCMTransport("/astra/"+name, message_type)
+            bridge.set_transport(name, LCMTransport("/astra/"+name, message_type))
         coordinator.start_all_modules()
         threading.Event().wait()
     except KeyboardInterrupt:

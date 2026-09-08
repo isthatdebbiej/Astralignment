@@ -1,5 +1,8 @@
 # Verification evidence and open gates
 
+For current funded API and Docker results, see **September 8 deployment update**
+at the end. Earlier entries are retained as a chronological engineering record.
+
 Build T0: 2026-09-08 18:22 UTC. Six-hour deadline: 2026-09-09 00:22 UTC. Results below describe actual runs, not planned milestones. Later edits require their own checks.
 
 ## Confirmed runs
@@ -57,3 +60,51 @@ Camera and observation tests cover convex calibration, homography round trips, b
 - **Broader QA:** mobile layout, performance profiling, production-device load and visual regression matrices were not run.
 
 Preserve failures and scene/source hashes. Same-scene success is not held-out success. Do not count trials that never ran, change the evaluator to promote a candidate, or present reference/recorded data as fresh model output.
+# September 8 deployment update
+
+This update supersedes earlier API-funding and deployment-blocked entries above.
+
+- Real funded `gpt-6-astra` repair ID `e45b913f-f708-4872-9b7b-a35ad1f13306`.
+- Frozen source SHA-256 `3aacc05bdaf0ab3bed0fd9bc81b51650e89f395b7dfdc73c1af9be1754d500a3`.
+- Both goals completed in 18.8 simulated seconds; minimum separation 1.7676195578 m;
+  zero evaluated contact, human-zone, boundary, fall, and deadlock violations.
+- Exact replay matched 95 frames. Four held-out seeds passed without further
+  source changes or model calls: 104736, 209465, 314194, 418923.
+- Total local estimated API spend including probe: $0.525265. This is an
+  application-side token estimate, not a billing receipt.
+- Vultr Ubuntu 24.04: Docker Compose installed; separate CPU MuJoCo, gateway,
+  Caddy/static-web containers running. Let's Encrypt issued a trusted certificate
+  for `astralignment.64.177.14.149.sslip.io`; public HTTPS returned 200.
+- Unauthenticated API returned 401; operator-authenticated access succeeded.
+- Container smoke verified healthy simulator, two robots, matching model/state
+  episode UUID and scene epoch.
+- Current gateway/projection test run: 22 passed, zero failed.
+- Remote TURN test: `npx playwright test tests/browser/turn.spec.ts --workers=1
+  --reporter=line`, passed in 7.2 seconds. Both selected ICE candidates were
+  relays; decoded synthetic 320×240 video changed red to green, and a data channel
+  delivered payload. No real camera, API call, or credential-bearing trace used.
+- Overlay desktop tests passed locally (15.4 s) and on deployed HTTPS (15.1 s):
+  `tests/browser/overlay.spec.ts`. Both rendered 54/54 robot mesh instances over a
+  separate changing WebRTC video element; canvas had opaque robot pixels and a
+  transparent background. Authoritative physics poses advanced, and disconnect
+  cleared robot pixels. Screenshots were inspected. This is synthetic camera QA,
+  not evidence of accurate physical-phone calibration.
+- Still open: physical iPhone alignment and server-side API access. Native DimOS
+  validation is tracked independently below as its integration checks complete.
+- Native DimOS observation and control smoke passed on Vultr. One real worker
+  receives typed LCM poses and ticks. A clearly labeled trusted control fixture
+  delivered 30 native commands and moved robot A 0.425453416 m in authoritative
+  physics; commands expired to zero, then control was disabled and world paused.
+  The native codec test preserves simulation timestamp zero. This fixture is
+  not an Astra-generated policy. All five Compose services were running;
+  simulation and DimOS reported healthy.
+- Clean navigation: local desktop test passed in 10.0 s; deployed HTTPS test
+  passed in 9.0 s. Default sidebars/inspector/timeline are hidden; stage width
+  exceeds 90% and height exceeds 65% of the 1512×982 viewport. Setup Escape and
+  focus restoration, inspector switching, timeline toggling, and World/Camera
+  switching passed with no page errors.
+- Final clean-layout overlay regression passed on HTTPS in 18.1 s. The same
+  receiver tracks remained live across all view/panel toggles. After physics
+  advanced, both robots were visibly rendered in the reviewed screenshot;
+  post-run alpha/readiness checks prevent an earlier screenshot timing race.
+  Scene and previous calibration were restored. Synthetic camera only.

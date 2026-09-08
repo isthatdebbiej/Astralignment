@@ -1,0 +1,19 @@
+# DimOS owns native messaging; MuJoCo/Torch remain in the separate sim image.
+FROM python:3.12-slim-bookworm
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
+    SIM_URL=http://sim:8001 DIMOS_PORT=8003 \
+    LCM_DEFAULT_URL=udpm://239.255.76.67:7667?ttl=0 \
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libturbojpeg0 libgl1 libglib2.0-0 libgomp1 libportaudio2 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY sim/requirements-dimos.txt /app/requirements-dimos.txt
+RUN pip install --no-cache-dir -r /app/requirements-dimos.txt
+RUN useradd --create-home --uid 10001 astra
+COPY --chown=astra:astra sim/__init__.py sim/dimos_status.py sim/dimos_bridge.py sim/dimos_service.py sim/dimos_smoke.py /app/sim/
+USER astra
+EXPOSE 8003
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=4 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health',timeout=3)"
+CMD ["python", "-m", "sim.dimos_service"]

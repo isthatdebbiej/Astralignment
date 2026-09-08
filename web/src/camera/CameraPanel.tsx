@@ -10,6 +10,7 @@ export function StageCamera({ onVideoReady, onCalibration }: StageCameraProps) {
   const [still, setStill] = useState(''), [corners, setCorners] = useState<[number, number][]>([]), [width, setWidth] = useState(4), [depth, setDepth] = useState(3);
   const [size, setSize] = useState([0, 0]), [busy, setBusy] = useState(false);
   useEffect(() => () => { connection.current?.stop(); onVideoReady?.(null); }, []);
+  useEffect(()=>{let cancelled=false;void fetch('/api/camera/calibration').then(r=>r.ok?r.json():null).then(data=>{const c=data?.calibration;if(c&&!cancelled)onCalibration?.({widthMeters:c.width,depthMeters:c.depth,corners:c.corners,capturedAt:c.captured_at,imageWidth:c.frame_width,imageHeight:c.frame_height,basis:'meters-XY-Z-up',imageDataUrl:''});}).catch(()=>{});return()=>{cancelled=true;};},[]);
   async function pair() {
     setBusy(true); connection.current?.stop();
     try {
@@ -18,7 +19,7 @@ export function StageCamera({ onVideoReady, onCalibration }: StageCameraProps) {
       const session = await response.json();
       const link = `${location.origin}/phone?session=${encodeURIComponent(session.token)}`;
       setUrl(link); setQr(await QRCode.toDataURL(link, { width: 192, margin: 1 }));
-      connection.current = await connectCamera(session.token, 'viewer', null, stream => { if (video.current) { video.current.srcObject = stream; onVideoReady?.(video.current); } }, setStatus);
+      connection.current = await connectCamera(session.token, 'viewer', null, stream => { if (video.current) { video.current.srcObject = stream; onVideoReady?.(video.current);stream.getTracks().forEach(track=>track.addEventListener('ended',()=>onVideoReady?.(null),{once:true})); } }, value=>{setStatus(value);if(/disconnect|stopped|expired|unavailable|closed|failed/i.test(value))onVideoReady?.(null);});
     } catch (e) { setStatus(String(e)); } finally { setBusy(false); }
   }
   function capture() {
