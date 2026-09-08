@@ -1,12 +1,15 @@
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
+import {isLoopbackTestOrigin,requireOverlayMutationOptIn} from './test-origin-safety';
 test.use({channel:'chrome',headless:true,trace:'off',screenshot:'off',video:'off',viewport:{width:1512,height:982}});
 test('live synthetic video preserves pixels beneath authoritative elevated G1 overlay',async({browser})=>{
   test.setTimeout(180_000);
-  const base=process.env.OVERLAY_TEST_ORIGIN||'http://127.0.0.1:5173',context=await browser.newContext({viewport:{width:1512,height:982}});
+  // This gate runs before creating a context, authenticating, or making any request.
+  const base=requireOverlayMutationOptIn(process.env.OVERLAY_TEST_ORIGIN||'http://127.0.0.1:5173',process.env.OVERLAY_TEST_ALLOW_REMOTE_MUTATION),context=await browser.newContext({viewport:{width:1512,height:982}});
   if(base.startsWith('https:')){const token=readFileSync('D:/Projects/astra-operator-token.txt','utf8').trim();expect((await context.request.post(`${base}/api/auth`,{headers:{Origin:base},data:{token}})).status()).toBe(200);}
   const api=async(path:string,body?:unknown)=>{const response=body===undefined?await context.request.get(base+path):await context.request.post(base+path,{data:body});expect(response.ok(),`${path} status`).toBe(true);return response.json();};
   const original=await api('/api/sim/scene'),previousCalibration=(await api('/api/camera/calibration')).calibration;
+  if(!isLoopbackTestOrigin(base)&&!previousCalibration){await context.close();throw new Error('Refusing remote fixture: an absent calibration cannot be restored through the current API. Use a disposable local test environment.');}
   const fy=.5/Math.tan(Math.PI/6),fx=fy*720/1280,c=Math.cos(.55),s=Math.sin(.55);
   const project=([x,y,z]:number[])=>[.5+fx*x/(s*y-c*z+5),.5+fy*(-c*y-s*z)/(s*y-c*z+5)];
   const corners=[[-2,-1.5,0],[2,-1.5,0],[2,1.5,0],[-2,1.5,0]].map(project);

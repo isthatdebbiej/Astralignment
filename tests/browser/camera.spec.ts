@@ -1,12 +1,16 @@
 import { test, expect } from '@playwright/test';
+import { isLoopbackTestOrigin, requireOverlayMutationOptIn } from './test-origin-safety';
 
 // Synthetic desktop transport test only. Does not access a physical camera or prove iPhone compatibility.
 test.use({ channel: 'chrome', headless: true, trace: 'off', screenshot: 'off', video: 'off' });
 test('synthetic camera transport and confirmed obstacle add move remove reach physics', async ({ browser }) => {
   test.setTimeout(180_000);
+  // Use the same explicit remote mutation acknowledgment as the overlay fixture.
+  const base = requireOverlayMutationOptIn(process.env.CAMERA_TEST_ORIGIN || 'http://127.0.0.1:5173', process.env.OVERLAY_TEST_ALLOW_REMOTE_MUTATION);
   const context = await browser.newContext();
-  const base = process.env.CAMERA_TEST_ORIGIN || 'http://127.0.0.1:5173';
   const originalScene = await (await context.request.get(`${base}/api/sim/scene`)).json();
+  const previousCalibration = (await (await context.request.get(`${base}/api/camera/calibration`)).json()).calibration;
+  if (!isLoopbackTestOrigin(base) && !previousCalibration) { await context.close(); throw new Error('Refusing remote camera fixture: an absent calibration cannot be restored through the current API.'); }
   const errors: string[] = [];
   const sanitize = (text: string) => text.replace(/([?&](?:session|token)=)[^&\s"']+/g, '$1[redacted]');
   await context.addInitScript(() => {
@@ -98,5 +102,5 @@ test('synthetic camera transport and confirmed obstacle add move remove reach ph
     await expect.poll(() => sender.evaluate(() => (window as any).__cameraTest.streams.every((s: MediaStream) => s.getTracks().every(t=>t.readyState==='ended')))).toBe(true);
     await expect.poll(() => sender.evaluate(() => (window as any).__cameraTest.peers.every((p: RTCPeerConnection) => p.connectionState==='closed'))).toBe(true);
     expect(errors).toEqual([]);
-  } finally { const restored=await context.request.post(`${base}/api/sim/reset`,{data:{scene:originalScene}});expect(restored.ok(),'Restore original scene').toBe(true);await context.close(); }
+  } finally { if(previousCalibration){const restoredCalibration=await context.request.post(`${base}/api/camera/calibration`,{data:{confirmed:true,calibration:previousCalibration}});expect(restoredCalibration.ok(),'Restore original calibration').toBe(true);}const restored=await context.request.post(`${base}/api/sim/reset`,{data:{scene:originalScene}});expect(restored.ok(),'Restore original scene').toBe(true);await context.close(); }
 });

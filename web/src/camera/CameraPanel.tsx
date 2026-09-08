@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { connectCamera, type CameraConnection } from './peer';
 import { ObstacleAnnotation } from './ObstacleAnnotation';
+import { PAIRING_KEY, readPairing, savePairing, type SavedPairing } from './pairing';
 export type StageCalibration = { widthMeters: number; depthMeters: number; corners: [number, number][]; capturedAt: string; imageWidth: number; imageHeight: number; basis: 'meters-XY-Z-up'; imageDataUrl: string };
 export type StageCameraProps = { onVideoReady?: (video: HTMLVideoElement | null) => void; onCalibration?: (value: StageCalibration) => void };
 export function StageCamera({ onVideoReady, onCalibration }: StageCameraProps) {
@@ -9,18 +10,28 @@ export function StageCamera({ onVideoReady, onCalibration }: StageCameraProps) {
   const [url, setUrl] = useState(''), [qr, setQr] = useState(''), [status, setStatus] = useState('Camera not paired');
   const [still, setStill] = useState(''), [corners, setCorners] = useState<[number, number][]>([]), [width, setWidth] = useState(4), [depth, setDepth] = useState(3);
   const [size, setSize] = useState([0, 0]), [busy, setBusy] = useState(false);
-  useEffect(() => () => { connection.current?.stop(); onVideoReady?.(null); }, []);
+  const generation=useRef(0);
+  const expiryTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
+  useEffect(() => { const saved=readPairing(sessionStorage);if(saved)void pair(saved);return()=>{generation.current++;clearTimeout(expiryTimer.current);connection.current?.stop({notifyPeer:false});connection.current=null;onVideoReady?.(null);}; }, []);
   useEffect(()=>{let cancelled=false;void fetch('/api/camera/calibration').then(r=>r.ok?r.json():null).then(data=>{const c=data?.calibration;if(c&&!cancelled)onCalibration?.({widthMeters:c.width,depthMeters:c.depth,corners:c.corners,capturedAt:c.captured_at,imageWidth:c.frame_width,imageHeight:c.frame_height,basis:'meters-XY-Z-up',imageDataUrl:''});}).catch(()=>{});return()=>{cancelled=true;};},[]);
-  async function pair() {
-    setBusy(true); connection.current?.stop();
+  async function pair(resume?:SavedPairing) {
+    const current=++generation.current;
+    setBusy(true); connection.current?.stop({notifyPeer:false});connection.current=null;
     try {
-      const response = await fetch('/api/camera/session', { method: 'POST' });
+      let session=resume??readPairing(sessionStorage);
+      if(!session){const response = await fetch('/api/camera/session', { method: 'POST' });
       if (!response.ok) throw new Error(`Pairing unavailable (${response.status})`);
-      const session = await response.json();
+      session=await response.json() as SavedPairing;}
+      if(current!==generation.current)return;
+      savePairing(sessionStorage,session);
+      clearTimeout(expiryTimer.current);
+      expiryTimer.current=setTimeout(()=>{if(current!==generation.current)return;generation.current++;connection.current?.stop({notifyPeer:false});connection.current=null;sessionStorage.removeItem(PAIRING_KEY);setUrl('');setQr('');onVideoReady?.(null);setStatus('Pairing expired. Create a new pairing.');},Math.max(0,session.expiresAt-Date.now()));
       const link = `${location.origin}/phone?session=${encodeURIComponent(session.token)}`;
       setUrl(link); setQr(await QRCode.toDataURL(link, { width: 192, margin: 1 }));
-      connection.current = await connectCamera(session.token, 'viewer', null, stream => { if (video.current) { video.current.srcObject = stream; onVideoReady?.(video.current);stream.getTracks().forEach(track=>track.addEventListener('ended',()=>onVideoReady?.(null),{once:true})); } }, value=>{setStatus(value);if(/disconnect|stopped|expired|unavailable|closed|failed/i.test(value))onVideoReady?.(null);});
-    } catch (e) { setStatus(String(e)); } finally { setBusy(false); }
+      if(current!==generation.current)return;
+      const peer=await connectCamera(session.token, 'viewer', null, stream => { if (current===generation.current&&video.current) { video.current.srcObject = stream; onVideoReady?.(video.current);stream.getTracks().forEach(track=>track.addEventListener('ended',()=>{if(current===generation.current&&video.current?.srcObject===stream)onVideoReady?.(null);},{once:true})); } }, value=>{if(current!==generation.current)return;setStatus(value);if(/expired|unauthorized|replaced/i.test(value)){sessionStorage.removeItem(PAIRING_KEY);setUrl('');setQr('');}if(/disconnect|stopped|expired|unavailable|closed|failed/i.test(value))onVideoReady?.(null);});
+      if(current!==generation.current)peer.stop({notifyPeer:false});else connection.current=peer;
+    } catch (e) { if(current===generation.current){setStatus(String(e));if(/expired|unauthorized/i.test(String(e))){sessionStorage.removeItem(PAIRING_KEY);setUrl('');setQr('');}} } finally { if(current===generation.current)setBusy(false); }
   }
   function capture() {
     const v = video.current;
@@ -39,7 +50,7 @@ export function StageCamera({ onVideoReady, onCalibration }: StageCameraProps) {
     } catch (error) { setStatus(String(error)); }
   }
   return <section className="camera-panel"><h2>Live stage camera</h2><p>Pair a fixed iPhone camera, then measure the stage floor.</p><p role="status">{status}</p><video ref={video} autoPlay muted playsInline style={{ width: '100%', maxHeight: 340, background: '#101316', borderRadius: 12 }} />
-    <div><button onClick={pair} disabled={busy}>{url ? 'Create new pairing' : 'Pair iPhone'}</button> <button onClick={() => { connection.current?.stop(); connection.current = null; if (video.current) video.current.srcObject = null; onVideoReady?.(null); setUrl(''); setQr(''); }}>Disconnect</button> <button onClick={capture}>Capture calibration still</button></div>
+    <div><button onClick={()=>void pair()} disabled={busy}>{url ? 'Reconnect camera' : 'Pair iPhone'}</button> <button onClick={() => { generation.current++;sessionStorage.removeItem(PAIRING_KEY);connection.current?.stop(); connection.current = null; if (video.current) video.current.srcObject = null; onVideoReady?.(null); setUrl(''); setQr(''); }}>Disconnect and forget</button> <button onClick={capture}>Capture calibration still</button></div>
     {url && <div className="camera-pairing"><img src={qr} alt="Scan to pair your phone camera" width="192" height="192" /><p>Scan on iPhone, then tap Start camera. Link expires after 30 minutes. Treat it as private.</p><input aria-label="Pairing link" readOnly value={url} style={{ width: '100%' }} /><button onClick={() => navigator.clipboard.writeText(url).then(() => setStatus('Pairing link copied')).catch(() => setStatus('Select and copy the pairing link'))}>Copy link</button>{location.protocol !== 'https:' && <p>iPhone camera requires a reachable HTTPS address. Localhost on desktop is not reachable from the phone.</p>}</div>}
     {still && <div className="camera-calibration"><h3>Measured floor calibration</h3><p>Click four floor corners in order: near-left (-W/2,-D/2), near-right (W/2,-D/2), far-right (W/2,D/2), far-left (-W/2,D/2). Measurements must come from the physical stage (supported range: 3–30 m). Confirmation also reserves a proposed presenter strip along the far side, Y=0.36D to 0.47D; this layout is authored, not detected from video.</p><div style={{ position: 'relative' }}><img src={still} alt="Stage calibration still; select four measured floor corners" style={{ width: '100%', cursor: 'crosshair' }} onClick={e => { if (corners.length >= 4) return; const rect = e.currentTarget.getBoundingClientRect(); setCorners([...corners, [(e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height]]); }} />{corners.map(([x,y], i) => <span key={i} style={{ position: 'absolute', left: `${x * 100}%`, top: `${y * 100}%`, background: '#ffdb79', color: '#111', borderRadius: 20, padding: '2px 6px', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }}>{i + 1}</span>)}</div><label>Width (m) <input type="number" min="3" max="30" step="0.1" value={width} onChange={e => setWidth(Number(e.target.value))} /></label> <label>Depth (m) <input type="number" min="3" max="30" step="0.1" value={depth} onChange={e => setDepth(Number(e.target.value))} /></label><p>{corners.length}/4 corners selected</p><button onClick={() => setCorners([])}>Reset corners</button> <button disabled={corners.length !== 4 || !(width >= 3 && width <= 30 && depth >= 3 && depth <= 30)} onClick={saveCalibration}>Confirm and apply calibration</button><p>This records a planar floor reference, not reconstructed 3D geometry. Keep the camera fixed; recalibrate after moving it.</p></div>}
     <ObstacleAnnotation video={video.current}/>
