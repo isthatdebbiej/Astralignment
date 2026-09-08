@@ -147,6 +147,7 @@ export default function App() {
     setHeldout({ ...result, scene_epoch: sceneEpoch, origin_episode_id: episodeId }); setNotice('Held-out evaluation completed. Results are available in Evidence.');
   });
   const replay = () => void execute('Loading replay', async () => {
+    setActiveTask('repair');
     if (!snapshot || !repair) throw new Error('Load a current repair before replaying it.');
     const sceneEpoch = snapshot.scene_epoch; const sourceHash = repair.source_hash; const episodeId = snapshot.episode_id;
     const result = await request<EvaluationResult | { evaluation: EvaluationResult }>('/api/replay', { repair_id: repair?.id }, 240_000);
@@ -286,7 +287,7 @@ export default function App() {
           <div className="action-menu"><button ref={moreTrigger} className="icon-button" aria-label="More scene actions" aria-expanded={moreOpen} aria-controls="scene-action-menu" onClick={() => setMoreOpen(value => !value)}><ChevronDown size={16}/></button>{moreOpen && <div id="scene-action-menu" className="scene-action-menu"><button disabled={locked} onClick={() => { setMoreOpen(false); randomize(); }}><Shuffle size={14}/>Randomize spawn</button><button disabled={locked || !model} aria-label="Run reference from scene start" onClick={() => { setMoreOpen(false); reference(); }}><RotateCcw size={14}/>Reference from scene start</button>{hasCurrentRepair && <button disabled={locked} onClick={() => { setMoreOpen(false); replay(); }}><Play size={14}/>Replay repair</button>}<button onClick={() => { setMoreOpen(false); openSetup('mission'); }}><Focus size={14}/>Edit mission</button></div>}</div>
         </div>
         <div className="playback-controls">
-          <span className={`connection-state ${connected ? 'online' : ''}`}><span className="status-dot"/>{connected ? snapshot?.paused ? 'Paused' : 'Running' : 'Offline'}</span>
+          <span className={`connection-state ${connected ? 'online' : ''}`}><span className="status-dot"/>{replayFrames.length ? replaying ? 'Replay playing' : 'Replay paused' : connected ? snapshot?.paused ? 'Paused' : 'Running' : 'Offline'}</span>
           <code className="action-clock">{displayState ? elapsed(displayState.sim_time) : '00:00.0'}</code>
           <button className={`timeline-toggle ${timelineOpen ? 'active' : ''}`} aria-label="Timeline" aria-expanded={timelineOpen} aria-controls="simulation-timeline" onClick={() => setTimelineOpen(value => !value)}><History size={14}/>Timeline{replayFrames.length > 0 && <span className="recorded-indicator"/>}<ChevronDown size={12}/></button>
         </div>
