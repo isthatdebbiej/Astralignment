@@ -31,6 +31,7 @@ function emit(event: Omit<GatewayEvent,'at'>) {
   for (const client of events.clients) if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 2e6) client.send(json);
 }
 let failure: FailureContext | undefined;
+let capturedSearch: SearchResult | undefined;
 let calibration: CameraCalibration | undefined;
 let job: {name:string,abort:AbortController} | undefined;
 async function exclusive<T>(name:string, action:(signal:AbortSignal)=>Promise<T>):Promise<T> {
@@ -135,10 +136,15 @@ app.post('/api/observe',async(req,res)=>{
 app.post('/api/cancel',(_req,res)=>{job?.abort.abort(new Error('Cancelled by operator'));res.json({ok:true});});
 
 const searchInput=z.object({trials:z.number().int().min(1).max(12).default(4),duration:z.number().min(5).max(30).default(30)}).strict();
+app.get('/api/search/current',async(_req,res)=>{
+  const state=await sim<WorldSnapshot>('/state');
+  if(!failure||failure.scene_epoch!==state.scene_epoch||failure.episode_id!==state.episode_id)return res.json({result:null});
+  res.json({result:capturedSearch ?? null});
+});
 app.post('/api/search',async(req,res)=>{
   const options=searchInput.parse(req.body||{});
   const result=await exclusive('Counterexample search',async signal=>{
-    failure=undefined;
+    failure=undefined;capturedSearch=undefined;
     await sim('/pause',{});
     const original=await sim<SceneConfig>('/scene');
     let last:SearchResult|undefined;
@@ -154,7 +160,7 @@ app.post('/api/search',async(req,res)=>{
       signal.throwIfAborted();
       const found=!evaluation.passed;
       last={found,trials:i+1,seed:scene.seed,scene,evaluation,message:found?`Measured failure: ${evaluation.reason}`:'No failure found in the tested trajectories.'};
-      if (found) {failure={scene,checkpoint_id:checkpoint.checkpoint_id,scene_epoch:checkpoint.scene_epoch,episode_id:checkpoint.episode_id,evaluation};break;}
+      if (found) {failure={scene,checkpoint_id:checkpoint.checkpoint_id,scene_epoch:checkpoint.scene_epoch,episode_id:checkpoint.episode_id,evaluation};capturedSearch=last;break;}
     }
     emit({type:'search',message:last!.message,data:last});
     return last!;

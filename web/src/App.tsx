@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ArrowRight, Check, CheckCheck, ChevronDown, ChevronRight, Circle, Code2, Cpu, ExternalLink, FileCode2, FlaskConical, Focus, GitBranch, History, KeyRound, Layers3, LoaderCircle, PanelLeftClose, Pause, Play, Radio, RotateCcw, Search, ShieldCheck, Shuffle, Smartphone, Sparkles, Terminal, TriangleAlert, Waypoints, X } from 'lucide-react';
-import type { CameraCalibration, EvaluationResult, RepairArtifact, SceneConfig, SearchResult, WorldSnapshot } from '../../contracts/index';
+import type { CameraCalibration, EvaluationResult, GatewayEvent, RepairArtifact, SceneConfig, SearchResult, WorldSnapshot } from '../../contracts/index';
 import { CameraPanel } from './camera/CameraPanel';
 import { SimulationStage } from './viewer/SimulationStage';
 import { CameraOverlay } from './viewer/CameraOverlay';
@@ -16,6 +16,12 @@ interface HeldoutResult { policy_hash: string; trials: number; passed: number; r
 interface BoundReplay { frames: WorldSnapshot[]; scene: SceneConfig | null; epoch: number; episodeId: string; sourceHash: string | null; }
 const number = (value: number | null | undefined, digits = 2) => value == null || !Number.isFinite(value) ? '—' : value.toFixed(digits);
 const elapsed = (value: number) => `${Math.floor(value / 60).toString().padStart(2, '0')}:${(value % 60).toFixed(1).padStart(4, '0')}`;
+
+export function repairPlaybackIsCurrent(result: RepairArtifact, epoch: number | undefined, episodeId: string): boolean {
+  return evidenceMatches(result.scene_epoch, null, epoch, undefined, result.origin_episode_id, episodeId)
+    && Boolean(result.source_hash) && result.evaluation?.policy_hash === result.source_hash
+    && Boolean(result.evaluation?.frames.length);
+}
 
 function CodeView({ source }: { source: string }) {
   return <div className="code-view" aria-label="Controller source code">{source.split('\n').map((line, index) => <div className={`code-line ${/^\s*(#|\/\/)/.test(line) ? 'comment-line' : ''}`} key={index}><span className="line-number">{index + 1}</span><code>{line || ' '}</code></div>)}</div>;
@@ -79,6 +85,7 @@ export default function App() {
   const acceptReplay = (evaluation: EvaluationResult, scene: SceneConfig | null, epoch: number, episodeId: string, sourceHash: string | null = null) => {
     if (!evidenceMatches(epoch, sourceHash, workspace.currentEpoch(), repairRef.current?.source_hash, episodeId, workspace.currentEpisode())) throw new Error('The scene or repair source changed while loading this replay. Load a current evaluation.');
     setReplayData({ frames: evaluation.frames, scene: evaluation.scene ?? scene, epoch, episodeId, sourceHash });
+    setReplayIndex(0); setReplaying(true); setScrubIndex(null); setScrubState(null);
   };
   useEffect(() => {
     if (snapshot?.scene_epoch == null) return;
@@ -111,13 +118,23 @@ export default function App() {
   const findCounterexample = () => void execute('Searching counterexamples', async () => {
     setActiveTask('search'); openInspector('evidence'); setReplayData(null); setScrubIndex(null);
     const result = await request<SearchResult>('/api/search', { trials: 6, duration: 30 }, 240_000);
-    setSearch(result); setNotice(result.message); await workspace.refresh();
-    if (result.evaluation?.frames?.length) { acceptReplay(result.evaluation, result.scene, result.evaluation.scene_epoch, result.evaluation.episode_id); setReplayIndex(result.evaluation.frames.length - 1); setReplaying(false); }
+    await workspace.refresh();
+    if (result.evaluation && !evidenceMatches(result.evaluation.scene_epoch, null, workspace.currentEpoch(), undefined, result.evaluation.episode_id, workspace.currentEpisode())) throw new Error('The world changed during search. Find a counterexample in the current scene.');
+    setSearch(result); setNotice(result.message);
+    if (result.evaluation?.frames?.length) acceptReplay(result.evaluation, result.scene, result.evaluation.scene_epoch, result.evaluation.episode_id);
   });
   const repairWithAstra = () => void execute('Astra is repairing', async () => {
     setActiveTask('repair'); openInspector('source');
     const result = await request<RepairArtifact>('/api/repair', { mission }, 240_000);
-    workspace.setRepair(result); setTab('evidence');
+    await workspace.refresh();
+    if (!evidenceMatches(result.scene_epoch, null, workspace.currentEpoch(), undefined, result.origin_episode_id, workspace.currentEpisode())) throw new Error('The world changed during repair. This result cannot be played in the current scene.');
+    if (repairRef.current && repairRef.current.id !== result.id && Date.parse(repairRef.current.created_at) > Date.parse(result.created_at)) throw new Error('A newer repair replaced this result. Replay the current repair instead.');
+    repairRef.current = result; workspace.setRepair(result); setTab('evidence');
+    setReplayData(null); setReplaying(false); setScrubIndex(null); setScrubState(null);
+    if (result.evaluation?.frames.length) {
+      if (!repairPlaybackIsCurrent(result, workspace.currentEpoch(), workspace.currentEpisode())) throw new Error('Repair trajectory does not match its frozen source and origin. It was not played.');
+      acceptReplay(result.evaluation, model?.scene ?? null, result.scene_epoch, result.origin_episode_id!, result.source_hash);
+    }
     setNotice(result.status === 'passed' ? 'Repair passed its episode evaluation. Run held-out tests to check generalization.' : `Repair completed with status: ${result.status}. Inspect the evidence.`);
   });
   const runHeldout = () => void execute('Evaluating held-out scenes', async () => {
@@ -151,9 +168,21 @@ export default function App() {
     setReplayIndex(0); setReplaying(true); setScrubIndex(null);
   });
   useEffect(() => {
-    const completedSearch = [...gatewayEvents].reverse().find(event => event.type === 'search' && event.data && typeof event.data === 'object' && 'found' in event.data);
-    if (completedSearch) { const result = completedSearch.data as SearchResult; if (evidenceMatches(result.evaluation?.scene_epoch, null, workspace.currentEpoch(), undefined, result.evaluation?.episode_id, workspace.currentEpisode())) setSearch(result); }
-  }, [gatewayEvents]);
+    let cancelled = false;
+    const restoreSearch = async () => {
+      try { return await request<{ result: SearchResult | null }>('/api/search/current'); }
+      catch {
+        const { events } = await request<{ events: GatewayEvent[] }>('/api/events');
+        const event = [...events].reverse().find(item => item.type === 'search' && item.data && typeof item.data === 'object' && 'found' in item.data);
+        return { result: event?.data as SearchResult | null | undefined };
+      }
+    };
+    void restoreSearch().then(({ result }) => {
+      if (cancelled) return;
+      if (result?.evaluation && evidenceMatches(result.evaluation.scene_epoch, null, workspace.currentEpoch(), undefined, result.evaluation.episode_id, workspace.currentEpisode())) setSearch(result);
+    }).catch(() => { /* Hydration must not replace an explicit action's error or evidence. */ });
+    return () => { cancelled = true; };
+  }, [snapshot?.scene_epoch, snapshot?.episode_id, gatewayEvents.filter(event => event.type === 'search').at(-1)?.at]);
   useEffect(() => {
     if (!replaying || !replayFrames.length) return;
     const current = replayFrames[replayIndex];
