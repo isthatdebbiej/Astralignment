@@ -230,7 +230,7 @@ export default function App() {
   const hasCurrentRepair = Boolean(repair && !staleRepair);
   return <div className="app-shell clean-workspace">
     <header className="workspace-nav">
-      <a className="wordmark" href="/" aria-label="Astralignment home"><span className="brand-symbol"><GitBranch size={18}/></span>astra<span>lignment</span></a>
+      <a className="wordmark" href="/" aria-label="Astralignment home">astra<span>lignment</span></a>
       <span className="nav-divider"/>
       <nav className="view-switch" aria-label="Viewport"><button className={stageView === 'camera' ? 'active' : ''} aria-pressed={stageView === 'camera'} onClick={() => setStageView('camera')}><Radio size={14}/>Camera overlay</button><button className={stageView === 'world' ? 'active' : ''} aria-pressed={stageView === 'world'} onClick={() => setStageView('world')}><Layers3 size={14}/>World</button></nav>
       <div className="workspace-nav-actions">
