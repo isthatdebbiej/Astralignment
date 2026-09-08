@@ -1,5 +1,9 @@
 # Simulation source and model attribution
 
+Astralignment is a standalone project, not part of Mori. The references below
+record the history of reused components, not a product affiliation or runtime
+dependency.
+
 Selected G1 assets were copied from the local Mori checkout's
 `sim/models/unitree_g1` with permission, including the original BSD-3-Clause
 LICENSE, upstream README, pinned provenance, model XML, STL meshes, policy

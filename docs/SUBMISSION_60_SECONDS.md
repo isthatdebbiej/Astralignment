@@ -32,7 +32,7 @@ Replace narration about success with the observed outcome if any test fails.
 ## Submission checklist
 
 - Public repository and new hackathon contribution clearly identified.
-- Disclose pretrained Unitree policy/meshes and copied Mori foundations with
+- Disclose pretrained Unitree policy/meshes and reused adapter foundations with
   their attribution; do not claim new locomotion training or a new model.
 - Show Astra both in development and in the product's executable repair loop.
 - Link the one-minute video and repository. Do not publish operator, API, pairing,

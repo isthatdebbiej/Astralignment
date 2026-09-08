@@ -4,7 +4,7 @@ Six-hour build, not ten. Preserve two G1 humanoids and continuous camera input. 
 
 Use GPT-6 Astra. Effort is assigned per lane. Work only in your assigned subsystem; root owns shared contracts, dependency manifests except requirements.txt, integration, commits and pushes. Do not commit independently.
 
-Use apply_patch for code edits. Never read or commit secrets. Follow sandbox approvals. Copy relevant Mori code/assets if useful, preserve source attribution, but remove Mori imports and never run Mori as a dependency.
+Use apply_patch for code edits. Never read or commit secrets. Follow sandbox approvals. Astralignment is a standalone project. Preserve third-party licenses and source attribution for reused code/assets; do not introduce dependencies on another local project.
 
 Shared spatial contract: meters, right handed, Z up, XY stage plane. API coordinates and MuJoCo use this basis. Three.js sets camera.up to (0,0,1) rather than scattering basis conversions. Physics is authoritative; rendering does not move robots.
 

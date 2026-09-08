@@ -1,12 +1,14 @@
 # Astralignment
 
-**Make human–robot coordination debuggable.**
+**Test whether robot coordination respects the person sharing the space.**
 
-The robots know how to walk. Astra writes and tests the code that helps them work together around a human.
+A person asks two robots to cross a stage and leave an access corridor clear. Each robot can walk to its destination. Together, they can still collide, enter the corridor, or wait for each other until neither finishes.
 
-Astralignment is a developer workspace for finding coordination failures, inspecting their causes, and evaluating executable repairs. It combines real camera video, two simulated Unitree G1 humanoids, an independent evaluator, and GPT-6 Astra acting as a software engineer.
+Astralignment reproduces these failures in simulation and gives GPT-6 Astra the evidence needed to write a different coordinator. The new code runs from the same saved starting state. A separate evaluator checks whether both robots finish without violating the specified constraints. The developer can inspect the code, replay the motion, and test the unchanged program on different starts.
 
-**The output is not another plan in a chat window. It is coordination code, measured results, and a replay you can inspect.**
+The workspace combines two simulated Unitree G1 humanoids, real camera video, and an executable repair loop. The person specifies and confirms the constraints; Astra writes coordination software; MuJoCo exposes its physical consequences. No physical robot is controlled.
+
+The research question is specific: **can model-generated coordination code preserve a human-defined boundary while completing a shared task, and does the repair survive changes to the starting conditions?**
 
 [Get started](#get-started) · [What Astra does](#what-astra-does) · [Generated data](#what-data-does-this-produce) · [Architecture](#architecture-and-real-time-challenges)
 
@@ -16,7 +18,9 @@ Astralignment is a developer workspace for finding coordination failures, inspec
 
 Two competent agents can choose individually reasonable actions that produce an unacceptable joint outcome: competing for a passage, entering a protected area, or waiting indefinitely for each other. Better locomotion does not, by itself, resolve these coordination requirements.
 
-For this project, **human–agent alignment means translating a person's intent and boundaries into behavior that can be checked against observable outcomes**. The human defines the mission and confirms spatial constraints. Software agents select behavior. Simulated robots reveal its physical consequences.
+For this project, **human–agent alignment means completing the requested task while respecting the person's explicitly represented constraints**. The human defines the mission and confirms spatial constraints. Software agents select behavior. Simulated robots reveal its physical consequences.
+
+There are two distinct places to fail. The specification may omit something the person needs, or the controller may violate a correctly specified requirement. Astralignment currently tests the second. Mission text is supplied to Astra, but arbitrary natural-language requirements are not automatically turned into evaluator rules. A boundary absent from the scene and evaluator cannot be established by a passing result.
 
 Astralignment addresses **coordination failures under explicit, human-confirmed constraints**. It does not infer all human preferences or establish general model alignment. An independent-controller baseline failure is not evidence that Astra is deceptive or has a conflicting objective.
 
@@ -27,6 +31,12 @@ A presenter needs an access corridor through a stage. Two robots must reach diff
 The developer marks the corridor, runs the independent baseline, and inspects an actual failure. Astra receives that evidence and writes a revised coordinator. We evaluate the same starting checkpoint again, then different seeded starts with the source held fixed.
 
 Stopping both robots forever does not pass: both goals must be completed.
+
+### Why this remains useful as models improve
+
+Stronger models may solve more of these scenes on the first attempt. That would reduce the number of repairs needed, not remove the need to check task completion and constraint violations. A new layout, different starting state, or changed requirement is a new test condition. The evaluator gives developers a way to distinguish an actual improvement from a more convincing explanation.
+
+The current two-robot setting is deliberately narrow. It is an instrument for testing coordination, not evidence about deception, hidden objectives, or all forms of human–AI misalignment. More realistic human behavior and incomplete specifications would require new scenarios and evaluation methods.
 
 ## Why use it?
 
@@ -96,13 +106,30 @@ Counterexamples are **generated through simulation**, not retrieved from a publi
 
 **There is not yet a searchable durable counterexample corpus or an automated training pipeline.** A saved repair summary does not preserve the full checkpoint needed for replay after a simulator restart.
 
-### What could the data be used for?
+### How the data can improve Astra's behavior
 
-The immediate use is a **regression suite**: preserve a failure and verify that later coordinators do not reintroduce it. A durable collection could support model comparisons, failure-pattern analysis, and curated failure/repair examples for compatible learning systems.
+**Today, feedback improves the candidate program within a repair session. It does not update Astra's model weights.** After each test, Astra receives the measured outcome, violation events, completion metrics, and selected robot states. It can revise its code using that feedback. The current loop is bounded to three distinct candidate tests; improvement is not guaranteed. Earlier repair artifacts are not automatically retrieved into later sessions.
 
-That requires an archive/export layer: versioned scenes, runtime and policy versions, complete checkpoints or reproducible initialization, trajectories, source hashes, evaluator definitions, and all outcomes—including failures. Dataset splits should separate scenario families, not merely reshuffle nearly identical starts. Camera-derived material needs consent and privacy review before sharing.
+A useful example links a requirement to a consequence: the corridor was reserved; a candidate entered it at a particular simulated time; a revised candidate changed its routing or yielding decisions; a repeat evaluation measured whether the violation disappeared and both robots still finished. The explanation alone is not the label—the executed result is.
 
-The intended contribution is **paired behavioral evidence**, not a pile of videos: what the person required, what failed, what code changed, and what happened when that code was tested again.
+| Use | How it could change behavior | Implementation status |
+| --- | --- | --- |
+| Feedback during repair | Let Astra revise a coordinator after observing an actual failure rather than guessing whether its first program works | Implemented |
+| Regression evaluation | Detect whether a new model, prompt, or tool interface reintroduces previously observed failures | Individual replay and held-out tests implemented; durable suite not implemented |
+| Retrieval of previous failures | Supply relevant, verified examples before Astra writes a new coordinator | Not implemented; requires an indexed archive and leakage controls |
+| Training examples | Provide requirement–program–outcome records, or controlled comparisons between failed and successful candidates, for a separately authorized training process | Not implemented; no model-weight update or training integration |
+
+For researchers, the proposed unit of data is an **experiment record**, not a camera clip: the human requirement, encoded constraints, scene and runtime versions, starting checkpoint, candidate source/hash, evaluator version, measured trajectory, and outcome. Both failed and successful candidates matter. The current persisted artifact is smaller than this record: it does not retain every revision, full trajectory, or durable checkpoint.
+
+### What would count as improvement?
+
+A stronger coordinator should complete more tasks **without increasing violations**. A useful study would report first-attempt success, success within a fixed repair budget, violations by type, completion time, and model cost across a declared test set. A controller that reduces collisions by never moving must fail the completion criterion.
+
+To test whether accumulated examples help Astra, compare the same model and tool budget with and without those examples. Keep evaluation scenes out of retrieval and training. Split by layout and constraint family, not just nearby random seeds, and retain unsuccessful repairs in the results. Four held-out starts in one geometry do not establish transfer to other environments.
+
+This requires a versioned archive/export layer and a reproducibility check before building a corpus. Constraint labels also need human review: an evaluator can consistently reward the wrong specification. Any shared camera-derived material needs consent and privacy review. None of these dataset or training steps is performed automatically by the current application.
+
+The intended contribution is a testable connection between **what the person required, what the controller did, what Astra changed, and whether the change held up**. That can support narrower, measurable reductions in coordination failures. It cannot, on its own, establish that Astra understands every human preference or is generally aligned.
 
 ## Get started
 
@@ -210,4 +237,4 @@ Run simulation tests with the project environment, for example `.venv/bin/python
 
 ## Attribution
 
-The pretrained G1 policy, model, and meshes originate from Unitree's `unitree_rl_gym`; their BSD-3-Clause license and pinned provenance are retained. Selected locomotion-adapter foundations were adapted from Mori with permission. Astralignment does not import or run Mori and does not claim to have trained the walking policy. See [source and model attribution](sim/ATTRIBUTION.md) for inherited components and new implementation boundaries.
+Astralignment is a standalone project. The pretrained G1 policy, model, and meshes originate from Unitree's `unitree_rl_gym`; their BSD-3-Clause license and pinned provenance are retained. Astralignment does not claim to have trained the walking policy. See [source and model attribution](sim/ATTRIBUTION.md) for inherited components and new implementation boundaries.

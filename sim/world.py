@@ -1,8 +1,8 @@
 """Two physical G1 humanoids in ONE MuJoCo world and one physics clock.
 
-The observation layout and PD law are adapted from the selected Mori
-sim/adapters/g1.py and Unitree RL Gym's BSD-3-Clause deploy_mujoco.py.
-This module has no Mori runtime imports. See models/unitree_g1/provenance.json.
+The observation layout and PD law reuse attributed locomotion foundations.
+See ATTRIBUTION.md and models/unitree_g1/provenance.json for source history
+and Unitree RL Gym's BSD-3-Clause assets. This simulation runs independently.
 """
 from __future__ import annotations
 

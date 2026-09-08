@@ -10,7 +10,7 @@ The vendored source is [Unitree Robotics unitree_rl_gym at commit 276801e46c5d43
 | G1 physical model | `resources/robots/g1_description/g1_12dof.xml` | `747ede40aa726b7352bae8353e95d0d0f908cec2257a27cbd78bc6e5a2d5a314` |
 | Policy configuration | `deploy/deploy_mujoco/configs/g1.yaml` | `73044e7d355c61915695c16d6e09eb3efef46eec1e3d708fd3eb9157dfe3bbbb` |
 
-These are the manifest's recorded hashes; runtime additionally hashes the policy and model. Selected files were copied through the authorized local Mori checkout; `sim/ATTRIBUTION.md` records adapter provenance. There are no Mori imports. Each robot/branch owns independent recurrent state. The 50 Hz policy outputs joint targets; MuJoCo runs at 500 Hz.
+These are the manifest's recorded hashes; runtime additionally hashes the policy and model. Assets are vendored into this standalone project; `sim/ATTRIBUTION.md` records source and adapter provenance. Each robot/branch owns independent recurrent state. The 50 Hz policy outputs joint targets; MuJoCo runs at 500 Hz.
 
 The six-hour scope reuses this pretrained locomotion baseline. Training a new walking policy would introduce training, export and validation work unrelated to the coordination claim. ASAP motion tracking would change the motion objective and introduce a separate integration/validation path; it is not implemented or claimed here. Neither is a fallback explanation for animated meshes or wheeled substitutes.
 
