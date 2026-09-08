@@ -10,7 +10,7 @@ The current implementation provides two simulated Unitree G1 humanoids, MuJoCo c
 
 The research question is: **when an agent says a physical task is complete, does that claim remain valid under the human action it invites?** The existing coordination experiments supply the checkpointing, execution, verification, and recording infrastructure for testing that question.
 
-[Get started](#get-started) · [What Astra does](#what-astra-does) · [Generated data](#what-data-does-this-produce) · [Architecture](#architecture-and-real-time-challenges)
+[Get started](#get-started) · [Dashboard workflow](#dashboard-workflow) · [What Astra does](#what-astra-does) · [Generated data](#what-data-does-this-produce) · [Architecture](#architecture-and-real-time-challenges)
 
 ## Evaluation task: a handoff under human reliance
 
@@ -21,6 +21,45 @@ A **false-success state** is one in which the agent reports completion but a per
 An application-level **commitment gate** is planned to block assurances when verification is missing, stale, or failed. Evidence must identify the claim, physical state, policy version, checked intervention, and validity conditions. A result from a different state or a weaker test cannot authorize the assurance. The current episode/source checks prevent some stale coordination results from being reused; they are not yet this handoff gate.
 
 Actor, verifier, and failure-mining responsibilities must remain separate. Today, generated coordination code runs in a bounded sandbox and cannot edit the independent evaluator; failure search is a separate gateway operation. The handoff extension will retain that separation so an explanation cannot change the evidence used to judge it.
+
+## Dashboard workflow
+
+The dashboard is an evaluation and debugging interface for human–agent–robot coordination. Its purpose is to connect a consequential claim to the physical state, the test performed, and the human action that follows. The workflow below describes the handoff extension; the implementation boundaries are listed afterward.
+
+### Configure and observe
+
+A developer selects a scenario, policy version, model configuration, and bounded environment perturbations. The planned live scene includes the robot, object geometry, human support state, sensor observations, and current handoff stage. An event timeline records model proposals, robot actions, verification requests, human inputs, and state transitions.
+
+### Verify the assurance
+
+When the agent makes a claim such as “you can remove the support,” the workbench will checkpoint the simulator and search counterfactual branches. Each branch executes a permitted human response: following the instruction, waiting, cancelling, or removing support at a different speed.
+
+An object can appear stable while still depending on human support. Verification therefore needs executed outcomes—object pose and velocity, contact, attachment state, and defined drop thresholds—not the agent's explanation or a command acknowledgement. A branch that was not executed must not be presented as verified.
+
+Each proposed verification record identifies the task version, world-state version, timestamp, policy version, and tested human action. Relevant changes invalidate that evidence. The planned commitment gate will block the assurance until verification runs again, rather than reuse a result from a different physical condition.
+
+### Inspect, correct, and retest
+
+The intended trace viewer supports replaying a failure, comparing successful and failing branches, inspecting observations and actions, and locating the first unsupported decision. Developers can then change geometry, thresholds, prompts, policies, or commitment-gate rules and rerun the case. Changes to thresholds or gate rules create a new evaluation version; they must not relabel an earlier failure as a success.
+
+Planned experiment tools include Astra-guided scenario generation, random-search baselines, failure reduction, and side-by-side policy comparisons. Their purpose is to find and isolate failures under a declared test budget, not to select only favorable runs.
+
+The complete handoff workflow is: configure a scenario, run the policy, capture an assurance, fork the state, execute human responses, inspect the trace, apply a correction, and retest.
+
+### Preserve the experiment
+
+The target export contains the initial state, action trace, evidence records, human events, model and policy versions, outcomes, and repair results. These records support reproduction, policy evaluation, regression testing, and curated training-data generation. Reproduction also requires compatible runtime versions, available assets, and a validated checkpoint restore path; an export alone does not guarantee it.
+
+### Available now and planned
+
+| Capability | Current implementation |
+| --- | --- |
+| Live scene and inspection | Two G1 robots, scene geometry, live-video overlay, controller source, evaluation evidence, runtime trace, and trajectory playback |
+| Failure search and repair | Seeded crossing-scene variations, independent baselines, checkpoint-based candidate tests, Astra repair, frozen-source replay, and held-out starts |
+| Evidence validity | Episode identity, scene epoch, and source-hash checks; not yet handoff-specific task/action validity or a commitment gate |
+| Durable export | JSON and MCAP records for available checkpoints, trajectories, tool calls/results, candidate code, outcomes, and provenance; no human-support event stream or camera-pixel archive |
+| Handoff state and interventions | Planned: object support/attachment state, assurance capture, human-response branches, and drop verification |
+| Experiment tooling | Planned: model/policy configuration selection as an integrated workflow, Astra-guided scenario mutations, automatic failure reduction, and side-by-side policy comparison |
 
 ## Current experiment: two robots sharing a constrained space
 
