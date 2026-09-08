@@ -1,0 +1,10 @@
+{
+  "model": "Depth-Anything-V2-Small",
+  "source": "https://github.com/DepthAnything/Depth-Anything-V2",
+  "source_commit": "a561b849ebae10a6f5ef49e26c83cbbcd36c71bf",
+  "weights_url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/main/depth_anything_v2_vits.pth",
+  "weights_sha256": "715fade13be8f229f8a70cc02066f656f2423a59effd0579197bbf57860e1378",
+  "license": "Apache-2.0 (Small model; retain upstream source notices)",
+  "output": "relative inverse depth, not meters",
+  "camera_pose_estimation": false
+}
