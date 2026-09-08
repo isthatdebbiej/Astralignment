@@ -2,6 +2,8 @@
 
 T0 is 2026-09-08 18:22 UTC. The six-hour deadline is 2026-09-09 00:22 UTC. These are planned time boxes, not assertions that a milestone passed at that time.
 
+Implementation checkpoint: the local production build, 15 physics tests, 19 gateway/product tests, sandbox-to-physics fixture replay, desktop journey and synthetic camera/annotation journey pass. Runtime Astra repair/vision remains gated by API credits; actual iPhone and Vultr/HTTPS deployment remain unverified. See `VERIFICATION.md` for precise scope. Four concurrent lanes were used: high-effort root/runtime, high-effort physics, high-effort product, and low-effort camera/calibration/deployment support.
+
 | Window | UTC | Work and exit evidence |
 | --- | --- | --- |
 | T+0–1h | 18:22–19:22 | High-effort physics lane establishes two real G1 models, pinned policy and shared clock; high-effort product lane builds the workbench; high-effort root lane implements contracts/runtime; low-effort camera lane adds pairing/deploy templates |
@@ -13,7 +15,7 @@ T0 is 2026-09-08 18:22 UTC. The six-hour deadline is 2026-09-09 00:22 UTC. These
 
 ## Local start
 
-From the repository root, create/activate a Python 3.12 virtual environment and install `requirements.txt`. Install Node 22 dependencies with `npm ci` once a lockfile exists. Start the simulation in one terminal:
+From the repository root, create/activate a Python 3.12 virtual environment and install `requirements.txt`. Install Node 22 dependencies using the committed lockfile with `npm ci`. Start the simulation in one terminal:
 
 ```sh
 python -m sim.server

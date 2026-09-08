@@ -23,18 +23,20 @@ In another terminal, set server-side `OPENAI_API_KEY` securely and run `npm run 
 - Frozen MuJoCo integration state plus independent LSTM buffers, actions, phase, scheduler and RNG.
 - Independent baseline search, real contacts and fixed evaluator; an authored reservation reference is explicitly labeled.
 - Astra writes executable JavaScript coordination. A separate QuickJS/WASM worker exposes no host filesystem, network, imports or credentials. Commands are bounded outside the generated code.
-- Continuous phone WebRTC capture, expiring QR pairing, measured planar calibration and tested projective mapping. HTTPS and actual-device verification are required remotely.
+- Continuous phone WebRTC capture, expiring QR pairing, measured planar calibration and tested projective mapping. Human-confirmed annotations create real collision boxes; optional Astra still-image suggestions require review. HTTPS and actual-device verification are required remotely.
 - Real-source replay and held-out seeded scenes; changing scene epochs invalidates old evidence.
 
 ## Current verification and gates
 
-Production build, focused camera/sandbox tests, and real two-humanoid physics tests have passed during implementation. The integrated baseline produced measured inter-robot contact while both robots completed. See the runbook for the current detailed status.
+Production build, desktop workbench QA, synthetic two-browser camera/annotation tests, and real two-humanoid physics tests have passed during implementation. A labeled human-authored coordination fixture completed both goals with zero measured violations and exactly replayed 76 frames through the actual sandbox-to-MuJoCo path. This is not an Astra-generated result. See the verification ledger for commands, scope and remaining gates.
 
 The configured API account returned **429: no credits remaining** on the initial access probe. Runtime repair generation remains unverified until a funded key is available. Browser/device and deployment checks are reported separately; no phone or Vultr deployment is implied by a successful build.
 
 ## Documentation
 
-- [Technical implementation](docs/IMPLEMENTATION.md)
+- [Complete technical specification](docs/TECHNICAL_SPEC.md)
+- [Implemented architecture](docs/IMPLEMENTATION.md)
+- [Verification evidence and open gates](docs/VERIFICATION.md)
 - [Six-hour runbook](docs/SIX_HOUR_RUNBOOK.md)
 - [Demo script](docs/DEMO_SCRIPT.md)
 - [Policy choices](docs/POLICIES.md)

@@ -13,7 +13,7 @@ function rejectedUsage(error: unknown) {
   const status=(error as {status?:number})?.status;
   return status && [400,401,403,404,429].includes(status) ? {input_tokens:0,output_tokens:0} : undefined;
 }
-export interface FailureContext { scene: SceneConfig; checkpoint_id: string; scene_epoch: number; evaluation: EvaluationResult }
+export interface FailureContext { scene: SceneConfig; checkpoint_id: string; scene_epoch: number; episode_id: string; evaluation: EvaluationResult }
 export type Emit = (event: Omit<GatewayEvent, 'at'>) => void;
 const candidateSchema = z.object({ source: z.string().min(30).max(40000), explanation: z.string().max(5000) }).strict();
 const candidateParameters = { type: 'object', properties: { source: { type: 'string', description: 'Complete executable plain JavaScript defining function coordinate(input)' }, explanation: { type: 'string', description: 'Explain the concrete causal fix and limitations' } }, required: ['source', 'explanation'], additionalProperties: false };
@@ -33,7 +33,7 @@ export async function repairFailure(context: FailureContext, mission: string, em
   if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is missing on the gateway. No substitute model or mock repair is used.');
   if (process.env.ASTRA_MODEL && process.env.ASTRA_MODEL !== MODEL) throw new Error(`This demo requires ${MODEL}; configured model differs.`);
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: 0, timeout: 180000 });
-  const artifact: RepairArtifact = { id: randomUUID(), model: MODEL, created_at: new Date().toISOString(), scene_epoch: context.scene_epoch, status: 'generating', source: '', source_hash: '', explanation: '', test_output: '' };
+  const artifact: RepairArtifact = { id: randomUUID(), model: MODEL, created_at: new Date().toISOString(), scene_epoch: context.scene_epoch, origin_episode_id: context.episode_id, status: 'generating', source: '', source_hash: '', explanation: '', test_output: '' };
   artifacts.set(artifact.id, artifact);
   const spentBefore = budget.spent;
   const input: ResponseInput = [
@@ -45,7 +45,7 @@ export async function repairFailure(context: FailureContext, mission: string, em
   try {
     for (let turn=0; turn<6; turn++) {
       signal.throwIfAborted();
-      reserveCall();
+      await reserveCall();
       let response;
       try {
         response = await client.responses.create({ model: MODEL, input, tools, tool_choice: 'required', parallel_tool_calls: false, reasoning: { effort: 'high' }, max_output_tokens: 12000, store: false, include:['reasoning.encrypted_content'] }, { signal });
@@ -87,8 +87,8 @@ export async function repairFailure(context: FailureContext, mission: string, em
           artifact.evaluation = evaluation;
           emit({ type: 'repair', message: evaluation?.passed ? 'Candidate passed this measured scene. Generalization is not yet tested.' : 'Candidate did not pass; returning actual evaluator feedback to Astra.', data: artifact });
           if (item.name === 'submit_controller') {
-            const live = await sim<{scene_epoch:number}>('/state');
-            if (live.scene_epoch !== context.scene_epoch) throw new Error('Scene changed during repair; result is stale and cannot be promoted.');
+            const live = await sim<{scene_epoch:number,episode_id:string}>('/state');
+            if (live.scene_epoch !== context.scene_epoch || live.episode_id !== context.episode_id) throw new Error('Scene changed during repair; result is stale and cannot be promoted.');
             artifact.status = evaluation?.passed ? 'passed' : 'failed';
             artifact.usage_usd = budget.spent-spentBefore;
             await saveStore();
@@ -110,7 +110,7 @@ export async function repairFailure(context: FailureContext, mission: string, em
 
 export async function probeAstra(): Promise<{ok: boolean; model: string; message: string}> {
   if (!process.env.OPENAI_API_KEY) return {ok:false,model:MODEL,message:'Server API key is absent'};
-  reserveCall();
+  await reserveCall();
   let response;
   try {
     const client = new OpenAI({maxRetries:0,timeout:30000});

@@ -1,13 +1,15 @@
 [Unit]
-Description=Astralignment gateway
-After=network-online.target astra-sim.service
+Description=Astralignment authoritative two-G1 MuJoCo world
+After=network.target
+
 [Service]
 Type=simple
 User=astra
 Group=astra
 WorkingDirectory=/opt/astra
-EnvironmentFile=/etc/astra/gateway.env
-ExecStart=/usr/bin/node --import tsx gateway/index.ts
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/astra/.venv/bin/python -m sim.server
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
@@ -15,5 +17,6 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
 ReadWritePaths=/opt/astra/artifacts /opt/astra/runtime
+
 [Install]
 WantedBy=multi-user.target

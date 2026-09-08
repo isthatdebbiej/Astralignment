@@ -11,25 +11,32 @@ export class PolicySandbox {
   private worker: Worker;
   private ready: Promise<void>;
   private serial = 0;
+  private closed = false;
+  private startupTimer?: NodeJS.Timeout;
+  private rejectStartup: (error: Error) => void = () => undefined;
   private pending = new Map<number, { resolve: (x: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
   constructor() {
     this.worker = new Worker(new URL('./policy-worker.mjs', import.meta.url), { env: {}, resourceLimits: { maxOldGenerationSizeMb: 64, stackSizeMb: 4 } });
     this.ready = new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Policy sandbox startup timed out')), 10000);
-      this.worker.once('error', error => { clearTimeout(timeout); reject(error); });
+      this.rejectStartup = reject;
+      this.startupTimer = setTimeout(() => { reject(new Error('Policy sandbox startup timed out')); void this.worker.terminate(); }, 10000);
+      this.worker.once('error', error => { clearTimeout(this.startupTimer); reject(error); });
       this.worker.on('message', message => {
-        if (message.ready) { clearTimeout(timeout); resolve(); return; }
+        if (message.ready) { clearTimeout(this.startupTimer); resolve(); return; }
         const job = this.pending.get(message.id);
         if (!job) return;
         clearTimeout(job.timer); this.pending.delete(message.id);
         if (message.error) job.reject(new Error(message.error)); else job.resolve(message.output);
       });
     });
+    // Closing before first call is valid; the rejection remains observable to call().
+    void this.ready.catch(() => undefined);
     this.worker.on('error', error => this.fail(error));
-    this.worker.on('exit', code => this.fail(new Error(`Policy sandbox exited (${code})`)));
+    this.worker.on('exit', code => { clearTimeout(this.startupTimer); const error=new Error(`Policy sandbox exited (${code})`);this.rejectStartup(error);this.fail(error); });
   }
   private fail(error: Error) { for (const job of this.pending.values()) { clearTimeout(job.timer); job.reject(error); } this.pending.clear(); }
   async call(source: string, input: unknown): Promise<PolicyOutput> {
+    if(this.closed) throw new Error('Policy sandbox is closed');
     if (source.length > 40000 || JSON.stringify(input).length > 100000) throw new Error('Policy input too large');
     await this.ready;
     const id = ++this.serial;
@@ -43,7 +50,7 @@ export class PolicySandbox {
     if (JSON.stringify(result.memory).length > 8000) throw new Error('Policy memory exceeds 8 KB');
     return result;
   }
-  async close() { await this.worker.terminate(); }
+  async close() { this.closed=true;clearTimeout(this.startupTimer);const error=new Error('Policy sandbox is closed');this.rejectStartup(error);this.fail(error);await this.worker.terminate(); }
 }
 
 /** Immutable admission layer. It bounds actuation; it does not certify safe navigation. */

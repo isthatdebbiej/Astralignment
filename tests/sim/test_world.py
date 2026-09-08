@@ -77,6 +77,20 @@ def test_model_visual_transforms_are_authored_not_compiled_mesh_poses():
     assert {g["body"].split("/")[0] for g in geoms} == {"g1_a", "g1_b"}
 
 
+def test_obstacle_visual_matches_physical_box_and_body_height():
+    spec = default_scene().model_dump()
+    spec["obstacles"] = [{"id": "visible", "position": [1.5, 1.0], "size": [.6, .6, .9]}]
+    world = SharedWorld(spec)
+    visual = next(geom for geom in world.model_description()["geoms"] if geom["name"] == "obstacle/visible")
+    body = next(body for body in world.snapshot()["bodies"] if body["name"] == visual["body"])
+    assert visual["kind"] == "box"
+    assert visual["local_position"] == [0, 0, 0]
+    assert visual["local_quaternion"] == [1, 0, 0, 0]
+    np.testing.assert_allclose(visual["size"], world.model.geom("obstacle/visible").size, atol=0, rtol=0)
+    assert body["position"] == [1.5, 1.0, .45]
+    assert body["quaternion"] == [1, 0, 0, 0]
+
+
 def test_seeded_scene_sampling_and_validation():
     assert randomized_scene(42) == randomized_scene(42)
     assert randomized_scene(42) != randomized_scene(43)

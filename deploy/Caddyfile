@@ -2,10 +2,15 @@
 astra.example.com {
   encode zstd gzip
   @gateway path /api/* /ws/*
-  reverse_proxy @gateway 127.0.0.1:8787
-  root * /opt/astra/dist
-  try_files {path} /index.html
-  file_server
+  # Mutually exclusive handles keep the SPA fallback from rewriting API/WS paths.
+  handle @gateway {
+    reverse_proxy 127.0.0.1:8787
+  }
+  handle {
+    root * /opt/astra/dist
+    try_files {path} /index.html
+    file_server
+  }
   header {
     Referrer-Policy "no-referrer"
     Permissions-Policy "camera=(self), microphone=()"

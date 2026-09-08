@@ -6,20 +6,22 @@ export const artifacts = new Map<string, RepairArtifact>();
 export const budget = { limit: Number(process.env.ASTRA_BUDGET_USD || 80), spent: 0, reserved: 0, estimated: true };
 export async function initializeStore() {
   await mkdir(root, { recursive: true });
-  try { const old = JSON.parse(await readFile(path.join(root, 'state.json'), 'utf8')); budget.spent = old.spent || 0; for (const a of old.artifacts || []) artifacts.set(a.id, a); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  try { const old = JSON.parse(await readFile(path.join(root, 'state.json'), 'utf8')); budget.spent = (old.spent || 0)+(old.reserved || 0); for (const a of old.artifacts || []) artifacts.set(a.id, a); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
 }
 let writes = Promise.resolve();
 export function saveStore() {
   writes = writes.then(async () => {
-    const data = JSON.stringify({ spent: budget.spent, artifacts: [...artifacts.values()].map(a => ({ ...a, evaluation: a.evaluation ? { ...a.evaluation, frames: [] } : undefined })) }, null, 2);
+    const data = JSON.stringify({ spent: budget.spent, reserved: budget.reserved, artifacts: [...artifacts.values()].map(a => ({ ...a, evaluation: a.evaluation ? { ...a.evaluation, frames: [] } : undefined })) }, null, 2);
     await writeFile(path.join(root, 'state.tmp'), data);
     await rename(path.join(root, 'state.tmp'), path.join(root, 'state.json'));
   });
   return writes;
 }
-export function reserveCall() {
+export async function reserveCall() {
   if (!Number.isFinite(budget.limit) || budget.spent + budget.reserved + 3 > budget.limit) throw new Error('API demo budget limit reached; no further model call made');
   budget.reserved += 3;
+  // Persist before dispatch: a process crash cannot silently erase in-flight spend.
+  await saveStore();
 }
 export async function settleCall(usage?: { input_tokens: number; output_tokens: number; input_tokens_details?: { cached_tokens?: number } }) {
   budget.reserved = Math.max(0, budget.reserved - 3);

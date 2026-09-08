@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import { WebSocket } from 'ws';
 import { once } from 'node:events';
 import { createFloorMapping } from '../../web/src/camera/homography.js';
+import { projectFootprint } from '../../web/src/camera/ObstacleAnnotation.js';
 test('camera accepts bounded SDP and ICE messages only', () => {
   assert.equal(validSignal({ type: 'offer', sdp: 'v=0' }), true);
   assert.equal(validSignal({ type: 'candidate', candidate: { candidate: 'candidate:1' } }), true);
@@ -50,6 +51,14 @@ test('floor homography maps perspective corners to centered meters and round tri
   round.forEach((v,i)=>assert.ok(Math.abs(v-p[i])<1e-8));
   assert.throws(()=>createFloorMapping([[0,0],[1,1],[1,0],[0,1]],8,6));
   assert.throws(()=>createFloorMapping(corners,0,6));
+});
+test('manual obstacle ground corners project into bounded world box',()=>{
+  const calibration={width:8,depth:6,corners:[[0,1],[1,1],[1,0],[0,0]] as [number,number][],captured_at:new Date().toISOString(),frame_width:640,frame_height:480};
+  const box=projectFootprint(calibration,[[.25,.75],[.5,.5]],.8);
+  assert.deepEqual(box.position,[-1,-.75]);assert.deepEqual(box.size,[2,1.5,.8]);
+  assert.throws(()=>projectFootprint(calibration,[[.25,.75],[.25,.5]],.8));
+  assert.throws(()=>projectFootprint(calibration,[[.25,.75],[.5,.5]],NaN));
+  assert.throws(()=>projectFootprint(calibration,[[-1,0],[.5,.5]],.8));
 });
 test('calibration accepts measured convex quadrilateral, rejects crossed and degenerate corners', () => {
   const value = { width: 4, depth: 3, captured_at: new Date().toISOString(), frame_width: 1280, frame_height: 720, corners: [[0,0], [1,0], [1,1], [0,1]] };

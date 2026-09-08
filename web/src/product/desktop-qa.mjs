@@ -12,7 +12,7 @@ try {
     try { browser = await chromium.launch({ channel, headless: true }); report.browser = channel ?? 'chromium'; break; }
     catch (error) { if (channel === undefined) throw error; }
   }
-  const context = await browser.newContext({ viewport: report.viewport, deviceScaleFactor: 1 });
+  const context = await browser.newContext({ viewport: report.viewport, deviceScaleFactor: 1, baseURL: report.url });
   const page = await context.newPage();
   page.on('pageerror', error => report.pageErrors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') report.consoleErrors.push(message.text()); });
@@ -56,17 +56,19 @@ try {
   await page.getByRole('button', { name: 'Toggle wireframe', exact: true }).click();
   report.checks.push('Wireframe inspection toggle');
   if (phase === 'journey') {
+    await page.getByRole('button', { name: 'Randomize spawn', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('.busy-state') && document.querySelector('.simulation-stage')?.getAttribute('data-model-ready') === 'true');
     const initial = await page.request.get('/api/sim/state').then(response => response.json());
-    if (!initial.paused) await page.getByRole('button', { name: 'Pause', exact: true }).click();
-    await page.getByRole('button', { name: /Run baseline/ }).click();
+    if (!initial.paused) await page.getByRole('button', { name: /^Pause/ }).click();
+    await page.getByRole('button', { name: /^Run baseline/ }).click();
     await page.waitForTimeout(1600);
-    await page.getByRole('button', { name: 'Pause', exact: true }).click();
+    await page.getByRole('button', { name: /^Pause/ }).click();
     await page.waitForTimeout(250);
     const paused = await page.request.get('/api/sim/state').then(response => response.json());
     if (!paused.paused || paused.tick <= initial.tick) throw new Error('Run/pause did not advance and pause authoritative physics.');
     report.checks.push(`Run and pause advanced physics tick ${initial.tick} → ${paused.tick}`);
     const slider = page.getByRole('slider', { name: 'Inspect captured simulation frame' });
-    await slider.fill('0');
+    await slider.focus(); await slider.press('Home');
     if (!(await page.locator('.viewport-label').innerText()).includes('RECORDED FRAME')) throw new Error('Timeline does not label recorded inspection.');
     await page.getByRole('button', { name: 'LIVE', exact: true }).click();
     report.checks.push('Timeline inspection labels recorded frame; Live returns to authoritative state');

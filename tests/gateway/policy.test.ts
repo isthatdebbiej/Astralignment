@@ -18,3 +18,8 @@ test('rejects duplicate robot commands and out-of-envelope speed', async () => {
   const sandbox = new PolicySandbox();
   try { await assert.rejects(sandbox.call(valid.replace("robot_id:'g1_b'", "robot_id:'g1_a'"), {memory:{}}), /exactly one/); await assert.rejects(sandbox.call(valid.replace('speed:.3','speed:10'), {memory:{}})); } finally { await sandbox.close(); }
 });
+test('closing before worker startup cancels readiness without a leaked timeout', async () => {
+  const sandbox = new PolicySandbox();
+  await sandbox.close();
+  await assert.rejects(sandbox.call(valid,{memory:{}}),/closed/);
+});

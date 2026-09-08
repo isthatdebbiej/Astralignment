@@ -10,7 +10,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "start": "tsx gateway/index.ts",
-    "test": "tsx --test tests/gateway/*.test.ts"
+    "test": "tsx --test tests/gateway/*.test.ts web/src/product/*.test.ts"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.5.0",

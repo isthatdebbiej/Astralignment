@@ -2,9 +2,11 @@ import { test, expect } from '@playwright/test';
 
 // Synthetic desktop transport test only. Does not access a physical camera or prove iPhone compatibility.
 test.use({ channel: 'chrome', headless: true, trace: 'off', screenshot: 'off', video: 'off' });
-test('synthetic canvas traverses real two-tab WebRTC and stops explicitly', async ({ browser }) => {
-  test.setTimeout(60_000);
+test('synthetic camera transport and confirmed obstacle add move remove reach physics', async ({ browser }) => {
+  test.setTimeout(180_000);
   const context = await browser.newContext();
+  const base = process.env.CAMERA_TEST_ORIGIN || 'http://127.0.0.1:5173';
+  const originalScene = await (await context.request.get(`${base}/api/sim/scene`)).json();
   const errors: string[] = [];
   const sanitize = (text: string) => text.replace(/([?&](?:session|token)=)[^&\s"']+/g, '$1[redacted]');
   await context.addInitScript(() => {
@@ -32,7 +34,6 @@ test('synthetic canvas traverses real two-tab WebRTC and stops explicitly', asyn
     page.on('console', m => { if (m.type() === 'error' && /camera|webrtc|rtcpeer/i.test(m.text())) errors.push(sanitize(m.text())); });
   }
   try {
-    const base = process.env.CAMERA_TEST_ORIGIN || 'http://127.0.0.1:5173';
     await viewer.goto(base);
     await viewer.getByRole('button', { name: 'Connect phone', exact: true }).click();
     await viewer.getByRole('button', { name: 'Pair iPhone', exact: true }).click();
@@ -51,9 +52,51 @@ test('synthetic canvas traverses real two-tab WebRTC and stops explicitly', asyn
     await expect.poll(async () => { const [r,g] = await pixel(); return r>150 && g<100; }).toBe(true);
     await sender.evaluate(() => { (window as any).__cameraTest.color='#00ff00'; });
     await expect.poll(async () => { const [r,g] = await pixel(); return g>150 && r<100; }).toBe(true);
+    viewer.on('dialog',dialog=>dialog.accept());
+    const api = async (path:string, body?:unknown) => {
+      const response=body===undefined?await context.request.get(base+path):await context.request.post(base+path,{data:body});
+      expect(response.ok(),`Fixture API ${path} status`).toBe(true);return response.json();
+    };
+    const clickNormalized = async (alt:string,points:number[][]) => {
+      const img=viewer.getByRole('img',{name:alt,exact:true});await img.scrollIntoViewIfNeeded();
+      const rect=await img.boundingBox();expect(rect).toBeTruthy();
+      for(const [x,y] of points)await img.click({position:{x:x*rect!.width,y:y*rect!.height}});
+    };
+    await viewer.getByRole('button',{name:'Capture calibration still',exact:true}).click();
+    await clickNormalized('Stage calibration still; select four measured floor corners',[[.1,.9],[.9,.9],[.9,.1],[.1,.1]]);
+    await viewer.getByLabel('Width (m)',{exact:true}).fill('8');await viewer.getByLabel('Depth (m)',{exact:true}).fill('6');
+    await viewer.getByRole('button',{name:'Confirm and apply calibration',exact:true}).click();
+    await expect(viewer.getByText('Confirmed measured floor calibration saved',{exact:true})).toBeVisible();
+    const before=await api('/api/sim/state'),checkpoint=await api('/api/sim/checkpoint',{});
+    const mark=async(points:number[][],id?:string)=>{
+      await viewer.getByRole('button',{name:'Mark obstacle',exact:true}).click();
+      await expect(viewer.getByRole('heading',{name:'Review measured obstacle'})).toBeVisible();
+      if(id)await viewer.getByLabel('Obstacle action').selectOption(id);
+      await clickNormalized('Captured stage: select two opposite ground footprint corners',points);
+      await viewer.getByLabel('Measured height (m)',{exact:true}).fill('0.8');
+      await viewer.getByLabel('I confirm the ground footprint, measured height, fixed camera, and scene update.').check();
+      await viewer.getByRole('button',{name:'Apply measured obstacle',exact:true}).click();
+      await expect(viewer.getByRole('heading',{name:'Review measured obstacle'})).not.toBeVisible();
+    };
+    await mark([[.56,.5266666667],[.6,.4733333333]]);
+    const added=await api('/api/sim/scene'),afterAdd=await api('/api/sim/state');
+    expect(added.obstacles).toHaveLength(1);expect(afterAdd.scene_epoch).toBeGreaterThan(before.scene_epoch);
+    const id=added.obstacles[0].id;
+    const model=await api('/api/sim/model');
+    const geom=model.geoms.find((g:any)=>g.kind==='box'&&g.name.includes(id));expect(geom).toBeTruthy();
+    const body=afterAdd.bodies.find((b:any)=>b.name===geom.body);expect(body).toBeTruthy();expect(body.position[2]).toBeCloseTo(.4,4);
+    expect((await context.request.post(`${base}/api/sim/fork`,{data:{checkpoint_id:checkpoint.checkpoint_id}})).status()).toBe(409);
+    await mark([[.6,.42],[.64,.3666666667]],id);
+    const moved=await api('/api/sim/scene'),afterMove=await api('/api/sim/state');
+    // Native pointer coordinates quantize to CSS pixels: allow 2 cm on this 8 m stage.
+    expect(moved.obstacles).toHaveLength(1);expect(moved.obstacles[0].id).toBe(id);expect(Math.abs(moved.obstacles[0].position[0]-1.2)).toBeLessThan(.02);expect(Math.abs(moved.obstacles[0].position[1]-.8)).toBeLessThan(.02);expect(afterMove.scene_epoch).toBeGreaterThan(afterAdd.scene_epoch);
+    await viewer.getByRole('button',{name:'Mark obstacle',exact:true}).click();await viewer.getByLabel('Obstacle action').selectOption(id);
+    await viewer.getByRole('button',{name:'Remove selected obstacle',exact:true}).click();
+    await expect(viewer.getByRole('heading',{name:'Review measured obstacle'})).not.toBeVisible();
+    expect((await api('/api/sim/scene')).obstacles).toHaveLength(0);expect((await api('/api/sim/state')).scene_epoch).toBeGreaterThan(afterMove.scene_epoch);
     await sender.getByRole('button', { name: 'Stop camera', exact: true }).click();
     await expect.poll(() => sender.evaluate(() => (window as any).__cameraTest.streams.every((s: MediaStream) => s.getTracks().every(t=>t.readyState==='ended')))).toBe(true);
     await expect.poll(() => sender.evaluate(() => (window as any).__cameraTest.peers.every((p: RTCPeerConnection) => p.connectionState==='closed'))).toBe(true);
     expect(errors).toEqual([]);
-  } finally { await context.close(); }
+  } finally { const restored=await context.request.post(`${base}/api/sim/reset`,{data:{scene:originalScene}});expect(restored.ok(),'Restore original scene').toBe(true);await context.close(); }
 });

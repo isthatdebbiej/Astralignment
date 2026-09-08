@@ -218,6 +218,10 @@ class SharedWorld:
             sx, sy, sz = obstacle.size
             body = ET.SubElement(world, "body", name="obstacle/"+obstacle.id, pos=f"{x} {y} {sz/2}")
             ET.SubElement(body, "geom", name="obstacle/"+obstacle.id, type="box", size=f"{sx/2} {sy/2} {sz/2}", rgba=".35 .4 .5 1")
+            geometries.append({"name": "obstacle/"+obstacle.id, "body": "obstacle/"+obstacle.id,
+                               "kind": "box", "size": [sx/2, sy/2, sz/2],
+                               "local_position": [0., 0., 0.], "local_quaternion": [1., 0., 0., 0.],
+                               "rgba": [.35, .4, .5, 1.]})
         return ET.tostring(root, encoding="unicode"), geometries
 
     def position(self, rid):
@@ -326,7 +330,7 @@ class SharedWorld:
                            "velocity": self.data.qvel[controller.vbase:controller.vbase+3].tolist(),
                            "fallen": controller.fallen(self.data), "waiting": controller.waiting,
                            "goal_reached": rid in self.metrics["goals_reached"],
-                           "command": controller.command.tolist(), "action": "wait" if controller.waiting else "go",
+                           "command": controller.command.tolist(), "action": "wait" if np.linalg.norm(controller.velocity) < .01 else "go",
                            "distance_to_goal": float(np.linalg.norm(q[:2]-np.array(controller.robot.goal))),
                            "joints": self.data.qpos[controller.qids].tolist()})
         return {"episode_id": self.episode_id, "scene_epoch": self.scene_epoch, "tick": self.tick,
@@ -339,6 +343,7 @@ class SharedWorld:
 
     def model_description(self):
         return {"basis": "right-handed-z-up", "units": "meters", "quaternion_order": "wxyz",
+                "scene_epoch": self.scene_epoch, "episode_id": self.episode_id,
                 "geoms": self.geometries, "scene": self.scene.model_dump(mode="json"),
                 "model_hash": self.model_hash, "policy_hash": self.policy_hash,
                 "provenance": self.provenance, "physics_hz": 500, "policy_hz": 50,

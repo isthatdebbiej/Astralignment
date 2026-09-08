@@ -87,14 +87,14 @@ export function SimulationStage({ model, state, connected, mode }: Props) {
     const textures = new Set<THREE.Texture>();
     const markers = new Map<string, THREE.Sprite>();
     const addLabel = (text: string, color: string, position: THREE.Vector3, scale = 0.8) => {
-      const canvas = document.createElement('canvas'); canvas.width = 384; canvas.height = 80;
+      const canvas = document.createElement('canvas'); canvas.width = Math.max(192, text.length * 18 + 30); canvas.height = 64;
       const context = canvas.getContext('2d')!;
-      context.fillStyle = '#14212ae8'; context.beginPath(); context.roundRect(0, 0, 384, 80, 12); context.fill();
+      context.fillStyle = '#14212ae8'; context.beginPath(); context.roundRect(0, 0, canvas.width, canvas.height, 8); context.fill();
       context.strokeStyle = color; context.lineWidth = 2; context.stroke();
-      context.font = '500 26px monospace'; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillStyle = color; context.fillText(text, 192, 42);
+      context.font = '500 28px monospace'; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillStyle = color; context.fillText(text, canvas.width / 2, 34);
       const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; textures.add(texture);
       const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }); materials.add(material);
-      const sprite = new THREE.Sprite(material); sprite.scale.set(scale, scale * 80 / 384, 1); sprite.position.copy(position); scene.add(sprite); return sprite;
+      const sprite = new THREE.Sprite(material); sprite.scale.set(scale, scale * canvas.height / canvas.width, 1); sprite.position.copy(position); scene.add(sprite); return sprite;
     };
     if (model?.scene) {
       const { width, depth, keepouts, robots } = model.scene;
