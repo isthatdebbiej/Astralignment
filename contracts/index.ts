@@ -16,11 +16,27 @@ export interface WorldSnapshot { episode_id: string; scene_epoch: number; tick: 
 export interface VisualGeom { name: string; body: string; kind: 'mesh' | 'box' | 'sphere' | 'capsule' | 'cylinder' | 'plane'; size: number[]; local_position: Vec3; local_quaternion: QuatWXYZ; mesh?: string; rgba: [number, number, number, number] }
 export interface ModelDescription { scene_epoch: number; episode_id: string; geoms: VisualGeom[]; scene: SceneConfig; provenance: Record<string, unknown> }
 export interface RobotCommand { robot_id: RobotId; action: 'go' | 'wait'; speed?: number; waypoint?: Vec2 }
-export interface EvaluationResult { episode_id: string; scene_epoch: number; scene?: SceneConfig; mode: ControllerMode; seed: number; policy_hash?: string; passed: boolean; metrics: Metrics; frames: WorldSnapshot[]; events: TraceEvent[]; reason: string }
+export interface EvaluationResult { episode_id: string; scene_epoch: number; scene?: SceneConfig; mode: ControllerMode; seed: number; policy_hash?: string; passed: boolean; metrics: Metrics; frames: WorldSnapshot[]; events: TraceEvent[]; reason: string; command_trace?: {sim_time:number;tick:number;output:unknown}[] }
 export interface RepairArtifact { id: string; model: string; created_at: string; scene_epoch: number; origin_episode_id?: string; status: 'generating' | 'testing' | 'passed' | 'failed' | 'error'; source: string; source_hash: string; explanation: string; test_output: string; evaluation?: EvaluationResult; usage_usd?: number }
 export interface GatewayEvent { type: 'status' | 'repair' | 'search' | 'error' | 'scene_invalidated'; at: string; message: string; data?: unknown }
 export interface SearchResult { found: boolean; trials: number; seed: number; scene: SceneConfig; evaluation: EvaluationResult | null; message: string }
 export interface CameraCalibration { corners: Vec2[]; width: number; depth: number; captured_at: string; frame_width: number; frame_height: number }
+/** Inferred camera geometry, never a human-confirmed metric calibration. */
+export interface PerceptionFrame {
+  session_id: string; frame_id: number; captured_at: number;
+  frame_width: number; frame_height: number; image: string;
+}
+export interface PerceptionResult {
+  session_id: string; frame_id: number; captured_at: number; processed_at: number;
+  frame_width: number; frame_height: number;
+  status: 'searching' | 'tracking' | 'lost' | 'error';
+  world_to_clip: number[] | null;
+  scale: 'estimated_metric' | 'unavailable';
+  reason: string; model: string; inference_ms: number;
+  floor_inlier_ratio?: number;
+  reprojection_error_px?: number;
+  depth_preview?: string;
+}
 export const DEFAULT_SCENE: SceneConfig = {
   width: 8, depth: 6, seed: 7,
   robots: [ { id: 'g1_a', spawn: [-2, 0, 0], goal: [2, 0] }, { id: 'g1_b', spawn: [0, -2, Math.PI / 2], goal: [0, 2] } ],

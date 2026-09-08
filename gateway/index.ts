@@ -13,6 +13,8 @@ import { evaluateSource, sim } from './sim-client';
 import { artifacts, budget, initializeStore } from './store';
 import { observeStage, observationInput } from './observe';
 import { assertArtifactOrigin } from './evidence';
+import { recordExperiment, listExperiments, readExperiment, exportExperimentMcap } from './recordings';
+import { registerPerception } from './perception';
 
 await initializeStore();
 const app = express();
@@ -54,6 +56,7 @@ app.use('/api',(req,res,next)=>{
   if (req.path === '/camera/config') return next();
   return operatorOnly(req,res,next);
 });
+registerPerception(app,()=>sim<SceneConfig>('/scene'));
 registerCamera(app,server,{onCalibration:async confirmedCalibration=>{
   if(confirmedCalibration.width<3||confirmedCalibration.width>30||confirmedCalibration.depth<3||confirmedCalibration.depth>30) throw new Error('Measured stage dimensions must be between 3 and 30 meters');
   const stage:SceneConfig=structuredClone(DEFAULT_SCENE);
@@ -97,6 +100,15 @@ app.get('/api/health',async(_req,res)=>{
   res.json({status:'online',model:MODEL,api_key_present:!!process.env.OPENAI_API_KEY,astra_access:astraAccess,sim:physics,budget,job:job?.name||null,sandbox:'QuickJS/WASM worker; no host capabilities',camera:'WebRTC; device check required'});
 });
 app.get('/api/artifacts',(_req,res)=>res.json({artifacts:[...artifacts.values()].reverse()}));
+app.get('/api/experiments',async(_req,res)=>res.json({experiments:await listExperiments()}));
+app.get('/api/experiments/:file',async(req,res)=>{
+  const match=/^([0-9a-f-]{36})\.(json|mcap)$/.exec(req.params.file);
+  if(!match) return res.status(400).json({error:'Invalid experiment filename'});
+  const [file,id,format]=match;
+  res.setHeader('Content-Disposition',`attachment; filename="${file}"`);
+  if(format==='mcap') return res.type('application/octet-stream').send(Buffer.from(await exportExperimentMcap(id)));
+  return res.json(await readExperiment(id));
+});
 app.get('/api/events',(_req,res)=>res.json({events:eventHistory}));
 app.get('/api/controller',async(_req,res)=>res.json(await sim('/controller')));
 // DimOS is a separate native robotics service, never loaded into the policy runtime.
@@ -138,6 +150,7 @@ app.post('/api/search',async(req,res)=>{
       const checkpoint=await sim<{checkpoint_id:string,scene_epoch:number,episode_id:string}>('/checkpoint',{});
       emit({type:'search',message:`Evaluating independent baseline, seed ${scene.seed} (${i+1}/${options.trials}).`});
       const evaluation=await sim<EvaluationResult>('/evaluate',{checkpoint_id:checkpoint.checkpoint_id,mode:'independent',duration:options.duration});
+      await recordExperiment('baseline',{scene,checkpoint,evaluation});
       signal.throwIfAborted();
       const found=!evaluation.passed;
       last={found,trials:i+1,seed:scene.seed,scene,evaluation,message:found?`Measured failure: ${evaluation.reason}`:'No failure found in the tested trajectories.'};
@@ -165,7 +178,9 @@ app.post('/api/replay',async(req,res)=>{
   const artifact=selectedArtifact(req.body);
   assertArtifactOrigin(artifact,await sim<WorldSnapshot>('/state'));
   if (!failure || artifact.scene_epoch!==failure.scene_epoch || artifact.origin_episode_id!==failure.episode_id) return res.status(409).json({error:'Frozen original checkpoint unavailable or stale. Run a fresh search and repair.'});
-  res.json(await exclusive('Frozen-source replay',signal=>evaluateSource(artifact.source,failure!.scene,{checkpoint_id:failure!.checkpoint_id,duration:30,signal})));
+  const evaluation=await exclusive('Frozen-source replay',signal=>evaluateSource(artifact.source,failure!.scene,{checkpoint_id:failure!.checkpoint_id,duration:30,signal}));
+  await recordExperiment('replay',{repair_id:artifact.id,source:artifact.source,source_hash:artifact.source_hash,scene:failure!.scene,evaluation});
+  res.json(evaluation);
 });
 app.post('/api/heldout',async(req,res)=>{
   const artifact=selectedArtifact(req.body);
@@ -180,6 +195,7 @@ app.post('/api/heldout',async(req,res)=>{
       const seed=(scene.seed+104729*(i+1))%2147483647;
       const heldout=await sim<SceneConfig>(`/random-scene?seed=${seed}`);
       const evaluation=await evaluateSource(artifact.source,heldout,{duration:30,signal});
+      await recordExperiment('heldout',{repair_id:artifact.id,source:artifact.source,source_hash:artifact.source_hash,scene:heldout,evaluation});
       evaluations.push(evaluation);
       emit({type:'status',message:`Frozen source ${artifact.source_hash.slice(0,8)}: held-out ${i+1}/${trials} ${evaluation.passed?'passed':'failed'} — ${evaluation.reason}`});
     }

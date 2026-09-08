@@ -377,7 +377,7 @@ def checkpoint():
         state_hash = hashlib.sha256(json.dumps(captured, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")).hexdigest()
         while len(svc.checkpoints) > 16:
             svc.checkpoints.popitem(last=False)
-        return {"checkpoint_id": checkpoint_id, "state_hash": state_hash, "episode_id": svc.world.episode_id,
+        return {"checkpoint_id": checkpoint_id, "state_hash": state_hash, "checkpoint": captured, "episode_id": svc.world.episode_id,
                 "scene_epoch": svc.world.scene_epoch, "tick": svc.world.tick, "state": svc.world.snapshot()}
 
 

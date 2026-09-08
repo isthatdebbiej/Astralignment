@@ -65,9 +65,11 @@ An optional still-image feature can ask Astra for scene proposals, which require
 
 The camera image remains real video. Three.js draws transparent-background robot meshes over it using authoritative MuJoCo body poses.
 
-An operator identifies four corners of a measured floor rectangle. A planar mapping anchors the stage; a fitted or manually adjusted pinhole-lens estimate projects robots above the floor. Confirmed obstacle annotations become collision boxes.
+The new **Start spatial tracking** action explicitly asks permission to send selected JPEG camera frames to a perception worker on Modal. It sends at most two frames per second, with one request in flight and no backlog; inference may be much slower. The first request can take up to two minutes while the worker starts. Stopping tracking stops these uploads without stopping the phone's live video.
 
-This is **not video converted into an animated environment**. The current system does not reconstruct arbitrary 3D geometry, track a moving camera, automatically detect people, or provide real-object occlusion. Keep the camera fixed after calibration. Read the [projection assumptions](docs/CAMERA_PROJECTION.md) before interpreting spatial accuracy.
+Automatic projection uses an **estimated metric** floor and camera pose anchored to an initial view, with a limited frame context. It is not full SLAM, a persistent room map, arbitrary 3D reconstruction, automatic human detection, or real-object occlusion. Lost, stale or invalid geometry withholds the robot projection instead of extrapolating a pose. Reacquiring a substantially different view may require restarting spatial tracking. The real video remains unchanged beneath the virtual robots.
+
+Advanced manual calibration remains available: identify four corners of a measured floor rectangle and adjust the estimated pinhole lens. Confirmed obstacle annotations become collision boxes. Keep the camera fixed in this manual mode; read the [projection assumptions](docs/CAMERA_PROJECTION.md) before interpreting spatial accuracy. The automatic worker integration is implemented in source; its deployment and end-to-end desktop/iPhone verification remain pending until separately reported. Earlier synthetic fixed-camera overlay tests do not verify automatic handheld tracking.
 
 ## Architecture and real-time challenges
 
@@ -97,14 +99,18 @@ Counterexamples are **generated through simulation**, not retrieved from a publi
 
 | Data | Current availability |
 | --- | --- |
-| Scene, seed, trajectories, events, evaluator metrics | Returned by search/evaluation/replay APIs; active histories are bounded in memory |
-| Full physics/policy checkpoints | In-memory store, limited to 16; not a durable archive |
-| Generated source, hash, explanation, test output, repair evaluation summary | Persisted with budget state in `runtime/state.json`; Docker uses a named volume |
-| Full evaluation frames | Returned during runs; intentionally removed from persisted repair summaries |
-| Held-out results | Returned for the current test; not automatically collected into a permanent corpus |
-| Camera video | Streamed through WebRTC; the application does not record a video archive |
+| Scene, seed, trajectories, events, evaluator metrics | New baseline, replay and held-out evaluations are written to the experiment archive with their full returned trajectory arrays |
+| Full physics/policy checkpoints | The live simulator still keeps at most 16 checkpoint handles; new baseline records also retain the returned checkpoint payload and state hash |
+| Generated source and candidates | Repair start, tool calls/results, tested candidates, final submissions and errors are archived, including available source/hash, explanation and actual evaluation evidence |
+| Compact repair summaries and budget state | Still stored separately in `runtime/state.json`; these summaries are not the full archive |
+| Provenance | Experiment records include content SHA-256, payload size, trajectory frame count and available source/model provenance hashes |
+| Camera video and image pixels | Excluded from experiment records; WebRTC video is not recorded, and selected perception uploads are not an archive of camera footage |
 
-**There is not yet a searchable durable counterexample corpus or an automated training pipeline.** A saved repair summary does not preserve the full checkpoint needed for replay after a simulator restart.
+The implemented archive is stored under `runtime/experiments` and exposed in **Evidence → Experiment archive**. Expand a record to inspect its identity/hash and download authenticated JSON or MCAP. The same-origin APIs are `GET /api/experiments`, `GET /api/experiments/:id.json` and `GET /api/experiments/:id.mcap`.
+
+MCAP exports use custom JSON-schema channels `/astralignment/experiment` and `/astralignment/trajectory`. They preserve full trajectory arrays as indexed messages alongside experiment metadata; they are **not ROS messages or a ROS-compatible bag profile**. Timestamps use relative simulation time where available, otherwise sequence order—not camera wall-clock recording times.
+
+Default limits are **128 MiB per record, 2 GiB for the archive and 2,000 records**. Limit failures are explicit; records and frames are not silently truncated or evicted to fit. This is local durable storage, not an off-host backup. There is no automatic recovery of historical runs that were never recorded, and exporting a checkpoint does not by itself implement cross-restart checkpoint import or guarantee replay across changed runtime versions. Archive deployment and export verification must be reported separately from implementation.
 
 ### How the data can improve Astra's behavior
 
@@ -115,11 +121,11 @@ A useful example links a requirement to a consequence: the corridor was reserved
 | Use | How it could change behavior | Implementation status |
 | --- | --- | --- |
 | Feedback during repair | Let Astra revise a coordinator after observing an actual failure rather than guessing whether its first program works | Implemented |
-| Regression evaluation | Detect whether a new model, prompt, or tool interface reintroduces previously observed failures | Individual replay and held-out tests implemented; durable suite not implemented |
-| Retrieval of previous failures | Supply relevant, verified examples before Astra writes a new coordinator | Not implemented; requires an indexed archive and leakage controls |
+| Regression evaluation | Detect whether a new model, prompt, or tool interface reintroduces previously observed failures | Individual replay, held-out tests and durable experiment/export records implemented; automated corpus-wide regression runner not implemented |
+| Retrieval of previous failures | Supply relevant, verified examples before Astra writes a new coordinator | Not implemented; archive listing/download is not semantic retrieval or automatic prompt augmentation |
 | Training examples | Provide requirement–program–outcome records, or controlled comparisons between failed and successful candidates, for a separately authorized training process | Not implemented; no model-weight update or training integration |
 
-For researchers, the proposed unit of data is an **experiment record**, not a camera clip: the human requirement, encoded constraints, scene and runtime versions, starting checkpoint, candidate source/hash, evaluator version, measured trajectory, and outcome. Both failed and successful candidates matter. The current persisted artifact is smaller than this record: it does not retain every revision, full trajectory, or durable checkpoint.
+For researchers, the persisted unit is an **experiment record**, not a camera clip. Linked repair records capture the submitted mission and failure context, tool arguments/results, candidate source/hash and available evaluation outcomes; baseline records preserve the scene, complete returned starting checkpoint and measured trajectory. Both failures and successes matter. Records capture the implemented workflow from this point onward; they do not reconstruct unrecorded earlier revisions or guarantee that every desired research label is present.
 
 ### What would count as improvement?
 
@@ -127,7 +133,7 @@ A stronger coordinator should complete more tasks **without increasing violation
 
 To test whether accumulated examples help Astra, compare the same model and tool budget with and without those examples. Keep evaluation scenes out of retrieval and training. Split by layout and constraint family, not just nearby random seeds, and retain unsuccessful repairs in the results. Four held-out starts in one geometry do not establish transfer to other environments.
 
-This requires a versioned archive/export layer and a reproducibility check before building a corpus. Constraint labels also need human review: an evaluator can consistently reward the wrong specification. Any shared camera-derived material needs consent and privacy review. None of these dataset or training steps is performed automatically by the current application.
+The archive/export layer supplies records for such a corpus, but reproducibility checks, dataset splits, label review and study design still require deliberate work. An evaluator can consistently reward the wrong specification. No automatic retrieval into later repairs, model-weight training, corpus publication or off-host backup is performed by the current application.
 
 The intended contribution is a testable connection between **what the person required, what the controller did, what Astra changed, and whether the change held up**. That can support narrower, measurable reductions in coordination failures. It cannot, on its own, establish that Astra understands every human preference or is generally aligned.
 
@@ -138,7 +144,7 @@ The intended contribution is a testable connection between **what the person req
 - Git, Node.js 22+, npm, and Python 3.12.
 - A desktop browser with WebGL. No physical robot or server GPU is required for the current CPU-policy simulation.
 - A funded server-side OpenAI API key with access to `gpt-6-astra` for generated repairs. The simulator/UI work without one; no mock repair is substituted.
-- For camera input: camera permission, a fixed phone mount, measured floor dimensions, and HTTPS. Your computer's localhost is not the phone's localhost.
+- For camera input: camera permission and HTTPS. Advanced manual calibration needs a fixed mount and measured floor dimensions; automatic spatial tracking additionally requires explicit selected-frame sharing consent and a configured Modal worker. Your computer's localhost is not the phone's localhost.
 - For the full hosted stack: Linux with Docker Engine and Compose. The verified Vultr configuration is Ubuntu 24.04, 8 vCPUs, 32 GB RAM—not a measured minimum. Allow disk space for substantial native DimOS dependencies.
 
 ### Local development
