@@ -3,7 +3,7 @@ import type { GatewayEvent, ModelDescription, RepairArtifact, TraceEvent, WorldS
 import { errorMessage, request, socketUrl } from './api';
 import { hydratedRepair, mergeGatewayEvents } from './workspaceConsistency';
 
-export interface Health { status?: string; model?: string; api_key_present?: boolean; astra_access?: { state: 'unchecked' | 'ready' | 'blocked'; message: string }; sim?: Record<string, unknown>; budget?: { limit: number; spent: number }; }
+export interface Health { status?: string; model?: string; api_key_present?: boolean; job?: string | null; astra_access?: { state: 'unchecked' | 'ready' | 'blocked'; message: string }; sim?: Record<string, unknown>; budget?: { limit: number; spent: number }; }
 export function useWorkspace() {
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null);
   const [model, setModel] = useState<ModelDescription | null>(null);

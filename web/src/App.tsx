@@ -8,6 +8,7 @@ import { errorMessage, request } from './product/api';
 import { useWorkspace } from './product/useWorkspace';
 import { evidenceMatches } from './product/workspaceConsistency';
 import { ExperimentArchive } from './product/ExperimentArchive';
+import { RepairResult } from './product/RepairResult';
 import { usePerception } from './camera/usePerception';
 
 type InspectorTab = 'source' | 'evidence' | 'trace';
@@ -235,9 +236,9 @@ export default function App() {
     const max = Math.max(2, ...valid.map(item => item.value!));
     return valid.map(item => `${(item.i / Math.max(1, timelineFrames.length - 1)) * 1000},${39 - (item.value! / max) * 32}`).join(' ');
   }, [timelineFrames]);
-  const locked = Boolean(busy) || !connected;
+  const locked = Boolean(busy || health?.job) || !connected;
   const validCounterexample = Boolean(search?.found && evidenceMatches(search.evaluation?.scene_epoch, null, snapshot?.scene_epoch, undefined, search.evaluation?.episode_id, snapshot?.episode_id));
-  const canRepair = Boolean(health?.api_key_present) && health?.astra_access?.state !== 'blocked' && validCounterexample && connected && !busy;
+  const canRepair = Boolean(health?.api_key_present) && health?.astra_access?.state !== 'blocked' && validCounterexample && !locked;
   const staleRepair = Boolean(repair && snapshot && !evidenceMatches(repair.scene_epoch, repair.source_hash, snapshot.scene_epoch, repair.source_hash, repair.origin_episode_id, snapshot.episode_id));
   const authRequired = /operator access required/i.test(workspace.connectionError);
   const showBaselineSource = Boolean(workspace.controller?.source) && (!repair?.source || activeTask === 'baseline');
@@ -260,6 +261,8 @@ export default function App() {
     catch (cause) { setError(errorMessage(cause)); }
   };
   const hasCurrentRepair = Boolean(repair && !staleRepair);
+  const repairProgress = [...gatewayEvents].reverse().find(event => event.type === 'repair' || event.message === 'Astra executable repair started.' || event.message.startsWith('Astra inspected'))?.message ?? 'Waiting for the next model or verification result.';
+  const repairInProgress = busy === 'Astra is repairing' || health?.job === 'Astra executable repair' || Boolean(hasCurrentRepair && (repair?.status === 'generating' || repair?.status === 'testing'));
   return <div className="app-shell clean-workspace">
     <header className="workspace-nav">
       <a className="wordmark" href="/" aria-label="Astralignment home">astra<span>lignment</span></a>
@@ -275,6 +278,7 @@ export default function App() {
     <main className={`workspace-grid ${inspectorOpen ? 'inspector-visible' : ''}`}>
       <section className="simulation-column">
       <div className="stage-container">{stageView === 'camera' ? <CameraOverlay stream={cameraStream} calibration={cameraCalibration} model={renderModel} state={displayState ?? null} connected={connected} mode={mode} perception={perception.result} perceptionEnabled={perception.enabled} perceptionStatus={perception.status} perceptionError={perception.error} onStartTracking={perception.start} onStopTracking={perception.stop} onConnect={() => openSetup()} onWorld={() => setStageView('world')}/> : <SimulationStage model={renderModel} state={displayState ?? null} connected={connected} mode={mode}/>}</div>
+      <RepairResult repair={repair} baseline={validCounterexample ? search?.evaluation ?? null : null} stale={staleRepair} busy={repairInProgress} progress={repairProgress} onReplay={replay} onInspect={() => {setActiveTask('repair');openInspector('source');}}/>
       <div className="simulation-actions">
         <div className="primary-controls">
           <button className="button primary" disabled={!connected || Boolean(busy) && snapshot?.paused !== false} onClick={snapshot?.paused !== false || replayFrames.length ? baseline : () => void pauseNow()}>{snapshot?.paused !== false || replayFrames.length ? <Play size={14} fill="currentColor"/> : <Pause size={14}/>}<span>{snapshot?.paused !== false || replayFrames.length ? 'Run baseline' : 'Pause'}</span><kbd aria-hidden="true">␣</kbd></button>

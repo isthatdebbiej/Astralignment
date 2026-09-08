@@ -1,0 +1,17 @@
+.repair-result { flex: 0 0 auto; max-height: 32vh; overflow: auto; margin: 0; padding: 12px 22px; border-top: 1px solid #344b55; border-bottom: 1px solid #344b55; background: #12232c; color: #c9dbda; font-size: 12px; }
+.repair-result-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.repair-result-heading > strong { font-size: 13px; }
+.repair-result-heading code { margin-left: auto; opacity: .6; font-size: 11px; }
+.repair-result-badge { border: 1px solid currentColor; border-radius: 4px; padding: 2px 5px; font-size: 10px; letter-spacing: .04em; }
+.repair-result-passed .repair-result-badge { color: #a6d4b8; }
+.repair-result-failed .repair-result-badge, .repair-result-error .repair-result-badge { color: #efa598; }
+.repair-result > p { margin: 9px 0; line-height: 1.5; }
+.repair-result-comparison { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 12px 0 8px; }
+.repair-result-comparison span { display: flex; flex-wrap: wrap; gap: 5px; }
+.repair-result-comparison strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.repair-result-scope { display: block; opacity: .65; line-height: 1.5; }
+.repair-result-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.repair-result-actions .button { font-size: 12px; }
+.repair-result-explanation { margin-top: 12px; border-top: 1px solid var(--border, #d8dedb); padding-top: 9px; }
+.repair-result-explanation summary { cursor: pointer; font-size: 11px; }
+.repair-result-explanation p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; opacity: .8; }
