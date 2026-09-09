@@ -4,7 +4,7 @@
 > The product name is undecided. The [first-iteration specification](docs/OSS_SPEC.md)
 > defines evidence curation for robot-policy training teams, with a CPU-only workflow
 > and no required model API key. A [local curation preview](docs/CURATION_IMPLEMENTATION.md)
-> now implements part of that workflow at /curation; it has not passed all release
+> implements the local end-to-end workflow at /curation; it has not passed all release
 > gates. It does not change the prototype setup or model requirements below.
 
 **A human–agent–robot evaluation workbench for testing whether an agent's assurance is supported by the physical state.**
@@ -19,7 +19,7 @@ The research question is: **when an agent says a physical task is complete, does
 
 [Get started](#get-started) · [Dashboard workflow](#dashboard-workflow) · [What Astra does](#what-astra-does) · [Generated data](#what-data-does-this-produce) · [Architecture](#architecture-and-real-time-challenges)
 
-The [product specification](docs/OSS_SPEC.md), [backend specification](docs/OSS_BACKEND_SPEC.md), and [frontend specification](docs/OSS_FRONTEND_SPEC.md) define planned revision 0.3.0: public-dataset import, evidence retrieval and review, persistent collections, and immutable selection exports. The [revision 0.2.0 archive](docs/archive/oss-v0.2.0/README.md) preserves the earlier hardware-investigation and simulation roadmap. Neither specification revision is an application release or a claim of implemented features.
+The [product specification](docs/OSS_SPEC.md), [backend specification](docs/OSS_BACKEND_SPEC.md), and [frontend specification](docs/OSS_FRONTEND_SPEC.md) define revision 0.3.0: public-dataset import, evidence retrieval and review, persistent collections, and immutable selection exports. The [revision 0.2.0 archive](docs/archive/oss-v0.2.0/README.md) preserves the earlier hardware-investigation and simulation roadmap. Specification revisions are not application releases. The [implementation guide](docs/CURATION_IMPLEMENTATION.md) and [verification ledger](docs/CURATION_VERIFICATION.md) identify tested behavior and pending qualification.
 
 ## Deferred research task: a handoff under human reliance
 

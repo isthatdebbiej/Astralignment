@@ -1,0 +1,231 @@
+{
+  "status": "unreviewed template—not a completed pilot",
+  "schema_version": "1.0.0",
+  "project_id": "default",
+  "corpus_fingerprint": "",
+  "source_revisions": {},
+  "reviewer": "",
+  "frozen_at": "",
+  "questions": [
+    {
+      "id": "q01",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q02",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q03",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q04",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q05",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q06",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q07",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q08",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q09",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q10",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q11",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q12",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q13",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q14",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q15",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q16",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q17",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q18",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q19",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    },
+    {
+      "id": "q20",
+      "query": "",
+      "manually_reviewed": false,
+      "relevant": [],
+      "evidence": [],
+      "review_seconds": {
+        "metadata": null,
+        "annotations": null
+      }
+    }
+  ]
+}

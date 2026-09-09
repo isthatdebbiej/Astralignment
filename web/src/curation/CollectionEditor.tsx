@@ -5,12 +5,15 @@ export async function curationApi(url:string,body?:unknown,method=body?'POST':'G
  const response=await fetch('/api/v1'+url,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
  const data=await response.json();if(!response.ok)throw new Error(data.error);return data;
 }
-type Detail=Collection&{versions:CollectionVersion[];episodes:Episode[];reviews:Review[]};
+type VersionSummary={id:string;created_at:string;collection_revision:number;member_count:number};
+type Detail=Collection&{versions:VersionSummary[];episodes:Episode[];reviews:Review[]};
 export function CollectionEditor({id,onChanged}:{id:string;onChanged:()=>Promise<void>}){
  const [data,setData]=useState<Detail|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const [reason,setReason]=useState(''),[message,setMessage]=useState('');
- useEffect(()=>{let active=true;setData(null);setError('');curationApi('/collections/'+id).then(d=>{if(active)setData(d);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[id]);
- async function run(action:()=>Promise<void>){setBusy(true);setError('');try{await action();setData(await curationApi('/collections/'+id));await onChanged();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ const [comparison,setComparison]=useState<any>(null);
+ const [versionOffset,setVersionOffset]=useState(0);
+ useEffect(()=>{let active=true;setData(null);setError('');curationApi('/collections/'+id+'?version_offset='+versionOffset).then(d=>{if(active)setData(d);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[id,versionOffset]);
+ async function run(action:()=>Promise<void>){setBusy(true);setError('');try{await action();setData(await curationApi('/collections/'+id+'?version_offset='+versionOffset));await onChanged();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  async function patch(change:Partial<Collection>){if(!data)return;await curationApi('/collections/'+id,{revision:data.revision,members:data.members,exclusions:data.exclusions,...change},'PATCH');}
  if(!data)return <section className="cu-panel">{error?<p role="alert">{error}</p>:<p>Loading collection…</p>}</section>;
  const episodes=data.episodes;
@@ -37,7 +40,13 @@ export function CollectionEditor({id,onChanged}:{id:string;onChanged:()=>Promise
  </article>;})}
  <details><summary>Exclusions ({data.exclusions.length})</summary>{data.exclusions.map(exclusion=><article key={exclusion.episode_id}><p>{exclusion.episode_id}: {exclusion.reason}</p><button disabled={busy} onClick={()=>void run(()=>patch({exclusions:data.exclusions.filter(e=>e.episode_id!==exclusion.episode_id)}))}>Clear exclusion</button></article>)}</details>
  <button disabled={busy||data.members.length===0} onClick={()=>void run(async()=>{await curationApi('/collections/'+id+'/versions',{});setMessage('Version frozen. Later draft changes do not modify it.');})}>Freeze immutable version</button>
- <h3>Published versions</h3>{data.versions.map(version=><article key={version.id}><p>{version.created_at} · {version.collection.members.length} selections · draft revision {version.collection.revision}</p>
+ <h3>Published versions</h3>
+ <footer><button disabled={versionOffset===0||busy} onClick={()=>setVersionOffset(Math.max(0,versionOffset-20))}>Previous versions</button><button disabled={data.versions.length<20||busy} onClick={()=>setVersionOffset(versionOffset+20)}>Next versions</button></footer>
+ {data.versions.length>1&&<details><summary>Compare frozen versions</summary><form className="cu-search" onSubmit={event=>{event.preventDefault();const form=new FormData(event.currentTarget);void run(async()=>{setComparison(await curationApi('/collection-versions/'+form.get('from')+'/compare/'+form.get('to')));});}}>
+ <label>From version<select name="from">{data.versions.map(v=><option key={v.id} value={v.id}>{v.created_at} · {v.id.slice(0,8)}</option>)}</select></label>
+ <label>To version<select name="to" defaultValue={data.versions[1]?.id}>{data.versions.map(v=><option key={v.id} value={v.id}>{v.created_at} · {v.id.slice(0,8)}</option>)}</select></label><button disabled={busy}>Compare</button></form>
+ {comparison&&<div><p>{comparison.added.length} additions · {comparison.removed.length} removals · {comparison.reviews_added.length} added review revisions</p><pre className="cu-scroll">{JSON.stringify(comparison,null,2)}</pre></div>}</details>}
+ {data.versions.map(version=><article key={version.id}><p>{version.created_at} · {version.member_count} selections · draft revision {version.collection_revision}</p>
  <a href={'/api/v1/collection-versions/'+version.id}>Inspect frozen manifest</a>{' '}
  <button disabled={busy} onClick={()=>void run(async()=>{await curationApi('/collection-versions/'+version.id+'/exports',{});setMessage('Export queued. Downloads appear in Jobs.');})}>Export selection</button></article>)}
  </section>;

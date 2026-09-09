@@ -2,10 +2,11 @@
 
 ## Active first-iteration contract
 
-The product name is undecided. Follow the planned revision 0.3.0 in
+The product name is undecided. Follow revision 0.3.0 in
 [the product spec](docs/OSS_SPEC.md), [backend spec](docs/OSS_BACKEND_SPEC.md),
-and [frontend spec](docs/OSS_FRONTEND_SPEC.md). These documents describe planned
-work, not implemented capabilities. Revision 0.2.0 is retained as
+and [frontend spec](docs/OSS_FRONTEND_SPEC.md). The implementation is a release
+candidate; [the verification ledger](docs/CURATION_VERIFICATION.md) separates
+executed checks from pending qualification. Revision 0.2.0 is retained as
 [archived planning](docs/archive/oss-v0.2.0/README.md), not current requirements.
 
 The first product iteration serves robot-policy training teams: register a public

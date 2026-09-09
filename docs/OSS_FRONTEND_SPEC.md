@@ -1,6 +1,9 @@
 # First-iteration frontend specification
 
-Specification revision: 0.3.0 | Status: planned, not implemented
+Specification revision: 0.3.0 | Status: implementation candidate; qualification pending
+
+See [implementation and setup](CURATION_IMPLEMENTATION.md) and the
+[verification ledger](CURATION_VERIFICATION.md) for executed checks.
 
 Implements the [product specification](OSS_SPEC.md) and consumes the
 [backend contract](OSS_BACKEND_SPEC.md).

@@ -1,12 +1,13 @@
 # First-iteration backend specification
 
-Specification revision: 0.3.0 | Status: planned, not implemented
+Specification revision: 0.3.0 | Status: implementation candidate; qualification pending
 
 Implements the [product specification](OSS_SPEC.md) for a CPU-only,
 single-operator evidence-curation workflow. The product is unnamed and
 model-agnostic. [Revision 0.2.0](archive/oss-v0.2.0/OSS_BACKEND_SPEC.md) is archived
 planning, not the active release contract. Existing prototype routes and stored
-records remain intact; do not represent this document as implemented support.
+records remain intact. See [implementation and setup](CURATION_IMPLEMENTATION.md)
+and the [verification ledger](CURATION_VERIFICATION.md) for executed checks.
 
 ## 1. Runtime, deployment, and budget
 
@@ -233,8 +234,9 @@ own feature/time/action contract and upstream-reader tests.
 
 ## 7. Minimum public API contract
 
-Document these planned resources under /api/v1 in shared types/OpenAPI during
-implementation. No routes below are claimed to exist yet.
+These resources are implemented under /api/v1. Shared types are in
+contracts/curation.ts; runtime schemas are in gateway/curation/app.ts.
+See the verification ledger for outstanding release qualification.
 
 | Resource / operation | Required behavior |
 | --- | --- |

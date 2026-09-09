@@ -1,35 +1,24 @@
-# Local curation preview
+# CPU evidence-curation workspace
 
-Status: partial implementation of planned specification 0.3.0, not a qualified release.
-The existing prototype remains at its original routes. Curation lives at
-`/curation` and has a separate API process on loopback port 8788.
+Implementation target: specification 0.3.0. The complete local journey is available
+at `/curation`: register a supported snapshot, inspect its import plan, search
+episodes, inspect recorded evidence, review labels, save a collection, and export
+an immutable selection. This is a release candidate, not a qualified public-data
+release. See [verification and remaining gates](CURATION_VERIFICATION.md).
 
-## What runs
+The existing simulation/camera/repair prototype is separate and unchanged.
+No GPU, model account, MuJoCo, ROS, DimOS, external FFmpeg executable, or Docker
+is required for the curation journey.
 
-- Library and Collections, contextual episode inspection, browser-selected light
-  and dark themes, keyboard-operable native controls and collapsible evidence.
-- Locally supplied BotFails v2 task folders: explicit registration, byte/hash
-  preflight, explicit import, one logical episode containing its camera views.
-- SQLite WAL persistence for sources, episodes, review history, drafts, immutable
-  collection versions and leased jobs. Only the API writes SQLite.
-- Metadata-only and explicitly annotation-assisted FTS search. Source task text
-  can disclose anomalies and is deliberately excluded from metadata-only search.
-- Original frame-label runs from the separate headerless CSV files. Numeric
-  categories are preserved, not guessed into a success/failure taxonomy.
-- Episode or frame-interval reviews with artifact evidence and a rationale.
-- Versioned selection manifests, JSONL and real Parquet annotation exports.
-  Intervals are references; no media is copied or sliced. Integrity findings and
-  changed checksums block export. Original annotation scopes remain explicit.
-- Cancel/retry and 60-second stale-lease recovery; retries recheck files and reuse
-  stable episode identities. File transfer resumption is not claimed.
+## Native setup
 
-## Local setup
+Use Node 22.16+ in the Node 22 line and Python 3.13. SQLite in this Node version
+prints an experimental-API warning. Python dependencies are pinned in
+[worker/requirements.txt](../worker/requirements.txt): DuckDB, PyArrow, and PyAV.
+PyAV supplies video decoding; the application does not require ffprobe on PATH.
+Use a local SSD, not OneDrive or a network share, for the SQLite directory.
 
-Use Node 22.16 or newer in the Node 22 line, Python 3.13, and FFmpeg's
-`ffprobe` on PATH. Without ffprobe, video integrity remains a finding and export
-is blocked. No ROS, MuJoCo, GPU or model key is required.
-
-From the repository in PowerShell:
+PowerShell, from the repository:
 
 ```powershell
 npm ci
@@ -39,140 +28,180 @@ $env:CURATION_PYTHON = "$PWD/runtime/curation-venv/Scripts/python.exe"
 npm run dev:curation
 ```
 
-Open [the local curation interface](http://127.0.0.1:5173/curation).
-For a built interface, run `npm run build`, then `npm run curation:api`, and
-open [the API-served interface](http://127.0.0.1:8788/curation).
-The curation startup does not start the simulation gateway. Run the existing
-prototype separately when needed.
+macOS/Linux equivalent:
 
-Place an independently acquired, pinned snapshot under
-`runtime/sources/<snapshot-name>/BotFails/`. In registration enter
-`<snapshot-name>` and specific task folders, for example
-`test/domotic_makingCoffee_anomaly`. Required task metadata includes
-`meta/info.json`, `meta/episodes.jsonl`, and `meta/tasks.jsonl`; include the
-referenced Parquet/video files and separate `BotFails/labels/<task>/` CSV files.
-The adapter does not download files or execute dataset scripts.
+```sh
+npm ci
+python3.13 -m venv runtime/curation-venv
+runtime/curation-venv/bin/python -m pip install -r worker/requirements.txt
+export CURATION_PYTHON="$PWD/runtime/curation-venv/bin/python"
+npm run dev:curation
+```
 
-The default upstream revision is
-`3478e49d91e1737eb76dfee2d81bb22617039c13`. Registration records this as
-operator-supplied; local checksums alone do not prove the files came from that
-upstream commit. Pinning against an independently verified upstream file manifest
-is still required before reference-dataset qualification.
+Open [Library](http://127.0.0.1:5173/curation). For a built interface, run
+`npm run build`, then `npm run curation:api`, and open
+[port 8788](http://127.0.0.1:8788/curation). This starts one API-owned CPU worker,
+not the prototype gateway. Native execution was tested on Windows; other-host
+instructions and Compose still need qualification.
 
-Inspect Sources for estimates/findings, approve the exact bytes, then import.
-Refresh Library search when the job completes. Create a collection, select
-episodes, review evidence, freeze a version and export. Downloads are in Jobs.
-Collection editing supports choosing a destination, episode/frame-interval
-selections, metadata edits, removals, exclusions with reasons, review provenance
-and frozen versions. The state/action inspector reads up to 64 original rows per
-page through the CPU worker. Its row cursor does not imply synchronized cameras.
+## Acquire and register a small source selection
 
-Configuration:
+The adapter supports the actual BotFails LeRobot v2.0 folder layout at upstream
+revision `3478e49d91e1737eb76dfee2d81bb22617039c13`.
+Obtain selected files independently after checking their byte estimates and terms.
+No registration, import, or verification command downloads recordings or runs
+dataset scripts.
+
+Place the snapshot under `runtime/sources/<snapshot-name>/BotFails/`.
+Register `<snapshot-name>` and explicit task folders such as
+`test/domotic_makingCoffee_anomaly`. Optional episode indices apply to each
+selected task. Start with one episode. Required metadata is
+`meta/info.json`, `meta/episodes.jsonl`, and `meta/tasks.jsonl`; supply the
+referenced Parquet/video files and separate `labels/<task>/episode_*_labels.csv`.
+Source-relative paths remain portable between operating systems.
+
+Preflight hashes selected files and reports exact bytes and missing evidence.
+Inspect the plan, then explicitly approve import. Media is fully decoded in a
+bounded streaming pass for integrity; frames are not cached as a decoded corpus.
+Browser playback subsequently decodes only the selected recording. Two camera
+views are one episode, not two samples. Outer directory splits and inner metadata
+split declarations are both retained. Headerless numeric CSV categories remain
+unmapped source categories, not invented failure labels.
+
+An operator-supplied revision is not proof of upstream identity. For public-data
+qualification, save the source API response to a local JSON file and run:
+
+```powershell
+runtime/curation-venv/Scripts/python.exe worker/verify_source.py --help
+```
+
+The verifier compares selected local files with the pinned Hugging Face tree's
+LFS SHA-256 or Git blob identities, fetching metadata only. It creates an
+exclusive verification receipt inside the snapshot. Reinspect as a new source
+revision to attach that receipt; existing approved manifests remain immutable.
+The verification helper has fixture tests; no public snapshot was qualified
+during this implementation.
+
+## Evidence, search, and collections
+
+Library embeds filters for project/source, task, robot, split, modality, source
+category, reviewed role, and integrity findings. Text retrieval uses FTS5.
+Metadata mode excludes revealing source task descriptions and reviews.
+Annotation-assisted mode explicitly includes them; match reasons disclose this.
+Neither mode is label-hidden prediction or automatic video understanding.
+
+Episode inspection has one recorded camera, source annotations, review history,
+and a paged state/action inspector. Native timestamps and gaps are preserved.
+The shared cursor moves video only when an original row contains a matching
+video path and timestamp. Missing mappings remain unknown; playback alignment
+does not establish causal synchronization. A paused/unmounted inspector cancels
+outstanding work where applicable. No missing actions or clocks are synthesized.
+
+Reviews append evidence, rationale, intended role, native interval, author, and
+supersession history. Source annotations are never edited. Collections preserve
+explicit membership, exclusions, declared use, selection provenance, family
+grouping, source revisions, and frozen review records. Draft revision conflicts
+require reloading. Published versions can be compared and exported independently.
+
+Exports contain a versioned manifest and matching JSONL/Parquet annotations,
+source references/checksums, original splits, family IDs, and provenance.
+Intervals remain references into recordings. Integrity failures block export;
+unknown training suitability does not become a training-ready claim.
+No ROS bag conversion, sliced LeRobot dataset, robot-action synthesis, or policy
+improvement is promised.
+
+## Storage and resource controls
 
 | Variable | Default / purpose |
 | --- | --- |
-| CURATION_DATA_DIR | runtime/curation; local durable SQLite and exports |
-| CURATION_SOURCE_ROOT | runtime/sources; allowlisted source files |
-| CURATION_PYTHON | python; isolated worker interpreter recommended |
-| CURATION_PORT | 8788 |
-| CURATION_AUTO_WORKER | 1; set 0 for separately managed worker |
-| CURATION_WORKER_TOKEN | Generated in memory for the native child worker |
-| CURATION_MAX_IMPORT_BYTES | 20 GiB selected input admission limit |
+| CURATION_DATA_DIR | runtime/curation: SQLite and committed exports |
+| CURATION_SOURCE_ROOT | runtime/sources: allowlisted original artifacts |
+| CURATION_PYTHON | python: isolated interpreter recommended |
+| CURATION_PORT | 8788, loopback |
+| CURATION_AUTO_WORKER | 1; use 0 for a separately managed worker |
+| CURATION_WORKER_TOKEN | Generated for native child; explicitly set for Compose |
+| CURATION_MAX_IMPORT_BYTES | 20 GiB selected original-file admission ceiling |
+| CURATION_METADATA_MAX_BYTES | 256 MiB SQLite page quota |
+| CURATION_EXPORT_MAX_BYTES | 1 GiB total export-directory write quota |
 
-This byte limit is not a disk quota or cloud billing cap. Keep data on local
-storage, not OneDrive or a network filesystem. Preflight hashes selected files
-and checks free space; large inputs are deliberately not optimized yet.
+One API owns the SQLite WAL writer and an exclusive ownership lock. One worker
+claims leased jobs. The pending queue is capped at 16, source selection at 1,000
+episodes/20 tasks, worker messages at 2 MiB, and individual metadata records at
+8 MiB. Select smaller batches when admission limits are reached. DuckDB uses one
+thread and a 256 MiB memory limit; Arrow/decoder thread counts are bounded.
+Sample pages contain at most 128 rows (UI: 64). No persistent thumbnail cache is
+generated. Artifact hash verification has a bounded stat-keyed cache and queue.
 
-## Docker Compose
+Job status, attempts, cancellation, failures, and committed results survive
+restart. A lost lease is retried with stable identities; three expired attempts
+fail visibly. Jobs expose elapsed time and worker process-lifetime peak RSS, not
+a fabricated per-job peak. Staged exports are never downloadable until committed.
+Interrupted staging files remain inspectable and count against the export quota;
+stop services before operator cleanup. Source evidence and published exports are
+never automatically evicted. Byte quotas are not hard process-memory limits or
+cloud billing caps. The initial budget remains $150 total, not monthly; no cloud
+resources were provisioned.
 
-A separate two-service CPU definition is in
-[compose.curation.yml](../compose.curation.yml). Docker was not available on the
-implementation host, so this configuration has not been built or smoke-tested.
+## Backup and restore
 
-Create the source folder and set a random internal worker token before starting:
+Stop API and worker first. Backups reject an active ownership lock and existing
+destinations. Include sources for a self-contained selected-evidence backup:
+
+```powershell
+runtime/curation-venv/Scripts/python.exe worker/backup.py backup runtime/curation runtime/backup-001 --sources runtime/sources --services-stopped
+runtime/curation-venv/Scripts/python.exe worker/backup.py verify runtime/backup-001
+runtime/curation-venv/Scripts/python.exe worker/backup.py restore runtime/backup-001 runtime/restored-001
+```
+
+Restore creates `data/` and `sources/` under the new destination. Point
+CURATION_DATA_DIR and CURATION_SOURCE_ROOT there before restarting. Without
+`--sources`, the backup retains references only; recover the verified source
+files separately. SQLite integrity and every copied artifact checksum are checked.
+The end-to-end test exercises backup, restore, reopening, and media range reads.
+
+## Docker handoff — not tested on this computer
+
+[compose.curation.yml](../compose.curation.yml) defines API and CPU worker only,
+each limited to one CPU and 1 GiB. It publishes loopback 8788, uses a named
+persistent data volume, and mounts selected sources read-only.
+
+On the other computer with Docker:
 
 ```powershell
 New-Item -ItemType Directory -Force runtime/sources
 $env:CURATION_WORKER_TOKEN = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
+docker compose -f compose.curation.yml config --quiet
 docker compose -f compose.curation.yml up --build
 ```
 
-Open [the local container interface](http://127.0.0.1:8788/curation). The API and
-worker share a named data volume; sources are mounted read-only. Each service is
-limited to one CPU and 1 GiB. Stop with `docker compose -f compose.curation.yml down`.
-Do not add `-v` unless intentionally deleting persisted data.
+Open [the container interface](http://127.0.0.1:8788/curation). Repeat registration,
+import, review, freeze, and export; restart both services and verify the same IDs,
+reviews, and exports. Check logs for worker failures. Stop with
+`docker compose -f compose.curation.yml down`; do not add `-v` unless intentionally
+deleting the durable volume. Docker builds and runtime tests are explicitly deferred.
 
-This preview is **local-only**. Do not bind the port publicly or use
-`CURATION_CONTAINER_LOCAL=1` outside the supplied loopback-published container
-configuration. Optional HTTPS/operator authentication is implemented but has not
-been qualified on a deployed HTTPS host. Set CURATION_PUBLIC_ORIGIN to the exact
-HTTPS origin (no trailing slash) and CURATION_OPERATOR_TOKEN to a random secret
-of at least 32 characters. A local reverse proxy must preserve Host and set
-X-Forwarded-Proto to https; do not expose the backend directly. Login issues an
-eight-hour HttpOnly, Secure, SameSite=Strict cookie covering API and media reads.
-Keep proxy/backend access private; container-local mode trusts its private network.
-Cloud instances still incur charges until stopped/deleted through the provider;
-the application does not manage that lifecycle. Nothing has been provisioned.
+Local mode must not be publicly exposed. Optional remote mode requires an exact
+HTTPS CURATION_PUBLIC_ORIGIN and a CURATION_OPERATOR_TOKEN of at least 32
+characters. A trusted local reverse proxy preserves Host and sets
+X-Forwarded-Proto=https. Signed eight-hour HttpOnly/Secure/SameSite=Strict cookies
+cover API and media reads. Keep the backend private.
+CURATION_CONTAINER_LOCAL=1 is only for the supplied private container network and
+loopback publication, not an alternative to remote authentication.
+HTTPS access logic is unit-tested; deployed proxy/TLS behavior is not qualified.
 
-For a cold backup, stop both services and copy the entire data directory/volume
-together with the read-only snapshot or its verified recoverable source copy.
-Restore both to the same logical roots before restart. Automated backup/restore
-qualification is pending.
-
-## Checks performed and remaining gates
-
-Executed locally on Windows with Node 22.16 and Python 3.13:
-
-- TypeScript and production build.
-- Existing 39-test prototype suite.
-- Curation API fixture: search-field isolation, invalid interval/evidence
-  rejection, stale collection revision rejection, immutable version snapshots,
-  review supersession, worker authentication/leases, cancellation and DB reopen.
-- Python/DuckDB fixture: grouped views, preserved split metadata, CSV frame runs,
-  corrupt-media findings, JSONL/Parquet selection exports and checksum rejection.
-- Headless Chrome: both themes, keyboard activation, collection persistence after
-  reload, empty-version rejection and no page errors. These are fixture checks,
-  not physical-device or real-video playback qualification.
-
-Run:
+## Local verification commands
 
 ```powershell
-npm run test:curation
-runtime/curation-venv/Scripts/python.exe tests/curation/test_worker.py
 npm run build
+npm run test:curation
+runtime/curation-venv/Scripts/python.exe -m unittest discover -s tests/curation -p 'test_*.py'
 npx tsx tests/curation/browser.qa.ts
 npm test
 ```
 
-Still required before claiming specification 0.3.0 acceptance:
-
-- Pinned public BotFails import and independently verified source identity.
-- A shared timeline with verified mappings where available. Paged state/action
-  sample inspection preserves original timestamps without interpolation;
-  camera views play independently, explicitly without cross-clock guarantees.
-- Browser presentation of cross-version comparisons and pagination controls for
-  every metadata resource. APIs now support version diffs, bounded source/job/
-  collection listings, and source, task, split, robot, modality, source-label,
-  current review-role and integrity filters.
-- Byte quotas during writes, append-only source revision enforcement and broader
-  restart/fault-injection coverage. Worker completion variants now have schemas;
-  stale-lease recovery retains attempt events and rejects late results.
-- Full media decode validation; ffprobe is a container/stream probe, not proof
-  that every frame decodes.
-- Deployed HTTPS qualification, Docker smoke test and tested restore.
-- Named-host import/memory/storage/query/preview measurements on actual data.
-- The frozen 20-question manually reviewed retrieval pilot.
-
-[The evaluation runner](../worker/evaluate_retrieval.py) refuses a pilot without
-20 reviewed questions, evidence references, source revisions, reviewer and freeze
-date. Supply a JSON object with `source_revisions`, `reviewer`, `frozen_at`,
-and `questions`. Each question contains `id`, `query`,
-`manually_reviewed: true`, `relevant` episode IDs, `evidence` references and
-optional measured `review_seconds` keyed by `metadata` and `annotations`.
-It reports both retrieval modes separately and never invents review effort.
-The flag is an operator declaration, not independent certification of review.
-No reviewed pilot or training benefit has been fabricated.
-
-The full [product](OSS_SPEC.md), [backend](OSS_BACKEND_SPEC.md) and
-[frontend](OSS_FRONTEND_SPEC.md) specifications remain planned contracts.
-This preview does not demonstrate alignment improvement or policy-training value.
+Browser QA uses installed Chrome. Tests generate explicitly labeled tiny fixtures
+under ignored runtime paths, not public recordings. Results and screenshots go
+under ignored `artifacts/curation/`. See the [verification ledger](CURATION_VERIFICATION.md)
+and [retrieval pilot protocol](evaluation/README.md). The public-data pilot,
+human review, deployed HTTPS, Docker, and downstream training benefits are not
+established by these local tests.

@@ -1,8 +1,7 @@
 FROM python:3.13-slim-bookworm
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY worker/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY worker/curation.py ./
+COPY worker/ ./
 ENV OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 CURATION_DATA_DIR=/data CURATION_SOURCE_ROOT=/sources
 CMD ["python","-u","curation.py"]

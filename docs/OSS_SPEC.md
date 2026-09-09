@@ -1,6 +1,10 @@
 # First-iteration product specification: evidence curation for robot-policy training
 
-Specification revision: 0.3.0 | Status: planned, not implemented
+Implementation and release evidence: [setup](CURATION_IMPLEMENTATION.md) ·
+[verification ledger](CURATION_VERIFICATION.md). Public-data and human-review
+qualification remain separate from fixture tests.
+
+Specification revision: 0.3.0 | Status: implementation candidate; qualification pending
 
 The product name is undecided. This document specifies the first product
 iteration, not a rename or an application release. The working prototype retains
