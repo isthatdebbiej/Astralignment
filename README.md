@@ -1,18 +1,27 @@
 # Astralignment
 
+> This README documents the existing prototype and its historical research direction.
+> The product name is undecided. The [first-iteration specification](docs/OSS_SPEC.md)
+> defines evidence curation for robot-policy training teams, with a CPU-only workflow
+> and no required model API key. A [local curation preview](docs/CURATION_IMPLEMENTATION.md)
+> now implements part of that workflow at /curation; it has not passed all release
+> gates. It does not change the prototype setup or model requirements below.
+
 **A human–agent–robot evaluation workbench for testing whether an agent's assurance is supported by the physical state.**
 
 An agent's statement can change what a person does next. If the agent says a robot has secured an object, a person may remove the support beneath it. The relevant question is not whether the explanation sounds reasonable, but whether the object remains supported after the person acts.
 
 Astralignment is being developed for robotics, embodied-AI, and alignment researchers evaluating policies under human reliance. The target is not dexterity. It is the coordination boundary between perception, policy execution, verification, and human action.
 
-The current implementation provides two simulated Unitree G1 humanoids, MuJoCo checkpoint forks, independent coordination checks, an Astra repair loop, real-video overlays, and durable JSON/MCAP experiment records. It tests crossing and right-of-way failures. No physical robot is controlled. **Object handoff, counterfactual human interventions, and an assurance commitment gate are the next evaluation task, not implemented capabilities of this release.**
+The current implementation provides two simulated Unitree G1 humanoids, MuJoCo checkpoint forks, independent coordination checks, an Astra repair loop, real-video overlays, and durable JSON/MCAP experiment records. It tests crossing and right-of-way failures. No physical robot is controlled. **Object handoff, counterfactual human interventions, and an assurance commitment gate are deferred research tasks, not implemented capabilities or first-iteration product requirements.**
 
 The research question is: **when an agent says a physical task is complete, does that claim remain valid under the human action it invites?** The existing coordination experiments supply the checkpointing, execution, verification, and recording infrastructure for testing that question.
 
 [Get started](#get-started) · [Dashboard workflow](#dashboard-workflow) · [What Astra does](#what-astra-does) · [Generated data](#what-data-does-this-produce) · [Architecture](#architecture-and-real-time-challenges)
 
-## Evaluation task: a handoff under human reliance
+The [product specification](docs/OSS_SPEC.md), [backend specification](docs/OSS_BACKEND_SPEC.md), and [frontend specification](docs/OSS_FRONTEND_SPEC.md) define planned revision 0.3.0: public-dataset import, evidence retrieval and review, persistent collections, and immutable selection exports. The [revision 0.2.0 archive](docs/archive/oss-v0.2.0/README.md) preserves the earlier hardware-investigation and simulation roadmap. Neither specification revision is an application release or a claim of implemented features.
+
+## Deferred research task: a handoff under human reliance
 
 The planned task has three participants: a robot secures an object, an agent says external support can be removed, and a human acts on that claim. At the assurance point, the workbench will fork the simulator and execute counterfactual human actions: removing support immediately, delaying removal, or changing the direction of an intervention. The verifier will check whether the object remains supported and whether the stated completion conditions hold.
 

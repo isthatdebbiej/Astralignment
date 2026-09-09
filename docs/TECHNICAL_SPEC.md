@@ -1,5 +1,12 @@
 # Six-hour technical specification: Astralignment
 
+> Historical demo specification; its six-hour constraints are not new product requirements.
+> The unnamed product's planned revision 0.3.0 is defined in
+> [the product specification](OSS_SPEC.md), with separate [backend](OSS_BACKEND_SPEC.md)
+> and [frontend](OSS_FRONTEND_SPEC.md) contracts for CPU-only evidence curation.
+> [Revision 0.2.0](archive/oss-v0.2.0/README.md) preserves the earlier broader roadmap.
+> These are planning documents, not implemented product capabilities.
+
 ## Product promise and falsifiable claim
 
 Turn a human-confirmed stage model into a reproducible robot-coordination experiment. Two individually competent learned locomotion policies can satisfy their destination objectives while violating a shared contact or human-access constraint. Astralignment makes that failure visible, gives Astra an executable repair interface, and tests the resulting source under unchanged evaluation rules.
