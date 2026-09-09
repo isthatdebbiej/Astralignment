@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { repairPlaybackIsCurrent } from '../../web/src/App';
+import { repairPlaybackIsCurrent } from '../../web/src/product/repairPlayback';
 import type { RepairArtifact } from '../../contracts';
 
 test('repair playback requires current origin, actual frames, and matching evaluated source', () => {

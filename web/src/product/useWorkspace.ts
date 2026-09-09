@@ -23,6 +23,9 @@ export function useWorkspace() {
   const repairRevision = useRef(0);
   const snapshotRevision = useRef(0);
   const hydrationSequence = useRef(0);
+  const latestRepair = useRef(repair);
+  const lastServerJob = useRef<string|null|undefined>(undefined);
+  latestRepair.current = repair;
   const publishRepair = useCallback((next: RepairArtifact) => { repairRevision.current++; setRepair(next); }, []);
   const acceptModel = useCallback((next: ModelDescription) => {
     if (next.scene_epoch !== epoch.current || next.episode_id !== lastEpisode.current) return;
@@ -107,7 +110,19 @@ export function useWorkspace() {
         const revision = snapshotRevision.current;
         void request<WorldSnapshot>('/api/sim/state').then(next => { if (revision === snapshotRevision.current) acceptSnapshot(next); }).catch(error => { if (revision === snapshotRevision.current) { setConnected(false); setConnectionError(errorMessage(error)); } });
       }
-      void request<Health>('/api/health').then(setHealth).catch(() => undefined);
+      void request<Health>('/api/health').then(async next => {
+        if (!active) return;
+        setHealth(next);
+        const wasRunning = Boolean(lastServerJob.current);
+        lastServerJob.current = next.job;
+        const current = latestRepair.current;
+        if (next.job || (!wasRunning && (!current || (current.status !== 'generating' && current.status !== 'testing' && current.evaluation?.frames.length)))) return;
+        const revision = repairRevision.current;
+        const result = await request<{artifacts:RepairArtifact[]}>('/api/artifacts');
+        if (!active || revision !== repairRevision.current) return;
+        const saved = result.artifacts?.[0];
+        if (saved && (!current || Date.parse(saved.created_at) >= Date.parse(current.created_at))) publishRepair(saved);
+      }).catch(() => undefined);
     }, 8000);
     return () => { active = false; clearTimeout(stateRetry); clearTimeout(eventRetry); clearInterval(poll); stateSocket?.close(); eventSocket?.close(); };
   }, [acceptSnapshot, refresh, publishRepair]);

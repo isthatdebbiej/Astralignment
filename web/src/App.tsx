@@ -9,20 +9,15 @@ import { useWorkspace } from './product/useWorkspace';
 import { evidenceMatches } from './product/workspaceConsistency';
 import { ExperimentArchive } from './product/ExperimentArchive';
 import { RepairResult } from './product/RepairResult';
+import { repairPlaybackIsCurrent } from './product/repairPlayback';
 import { usePerception } from './camera/usePerception';
 
 type InspectorTab = 'source' | 'evidence' | 'trace';
 type Task = 'baseline' | 'search' | 'repair' | 'heldout';
 interface HeldoutResult { policy_hash: string; trials: number; passed: number; results: EvaluationResult[]; scope?: string; scene_epoch: number; origin_episode_id: string; }
-interface BoundReplay { frames: WorldSnapshot[]; scene: SceneConfig | null; epoch: number; episodeId: string; sourceHash: string | null; }
+interface BoundReplay { frames: WorldSnapshot[]; scene: SceneConfig | null; epoch: number; episodeId: string; sourceHash: string | null; archived?: boolean; }
 const number = (value: number | null | undefined, digits = 2) => value == null || !Number.isFinite(value) ? '—' : value.toFixed(digits);
 const elapsed = (value: number) => `${Math.floor(value / 60).toString().padStart(2, '0')}:${(value % 60).toFixed(1).padStart(4, '0')}`;
-
-export function repairPlaybackIsCurrent(result: RepairArtifact, epoch: number | undefined, episodeId: string): boolean {
-  return evidenceMatches(result.scene_epoch, null, epoch, undefined, result.origin_episode_id, episodeId)
-    && Boolean(result.source_hash) && result.evaluation?.policy_hash === result.source_hash
-    && Boolean(result.evaluation?.frames.length);
-}
 
 function CodeView({ source }: { source: string }) {
   return <div className="code-view" aria-label="Controller source code">{source.split('\n').map((line, index) => <div className={`code-line ${/^\s*(#|\/\/)/.test(line) ? 'comment-line' : ''}`} key={index}><span className="line-number">{index + 1}</span><code>{line || ' '}</code></div>)}</div>;
@@ -38,6 +33,8 @@ export default function App() {
   const [tab, setTab] = useState<InspectorTab>('source');
   const [activeTask, setActiveTask] = useState<Task>('baseline');
   const [busy, setBusy] = useState('');
+  const executeVersion = useRef(0);
+  const pendingRepair = useRef<{previousId?:string}|null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -53,6 +50,7 @@ export default function App() {
   const [search, setSearch] = useState<SearchResult | null>(null);
   const [heldoutData, setHeldout] = useState<HeldoutResult | null>(null);
   const [replayData, setReplayData] = useState<BoundReplay | null>(null);
+  useEffect(() => { if (replayData?.archived && stageView === 'camera') setReplayData(null); }, [stageView, replayData?.archived]);
   const [replayIndex, setReplayIndex] = useState(0);
   const [replaying, setReplaying] = useState(false);
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
@@ -80,7 +78,7 @@ export default function App() {
   const repairRef = useRef(repair);
   const previousSourceHash = useRef(repair?.source_hash);
   repairRef.current = repair;
-  const replayMatches = evidenceMatches(replayData?.epoch, replayData?.sourceHash, snapshot?.scene_epoch, repair?.source_hash, replayData?.episodeId, snapshot?.episode_id);
+  const replayMatches = Boolean(replayData?.archived) || evidenceMatches(replayData?.epoch, replayData?.sourceHash, snapshot?.scene_epoch, repair?.source_hash, replayData?.episodeId, snapshot?.episode_id);
   const replayFrames = replayMatches ? replayData!.frames : [];
   const heldout = evidenceMatches(heldoutData?.scene_epoch, heldoutData?.policy_hash, snapshot?.scene_epoch, repair?.source_hash, heldoutData?.origin_episode_id, snapshot?.episode_id) ? heldoutData : null;
   const acceptReplay = (evaluation: EvaluationResult, scene: SceneConfig | null, epoch: number, episodeId: string, sourceHash: string | null = null) => {
@@ -91,7 +89,7 @@ export default function App() {
   useEffect(() => {
     if (snapshot?.scene_epoch == null) return;
     if (previousSourceHash.current !== repair?.source_hash) { previousSourceHash.current = repair?.source_hash; setScrubState(null); setScrubIndex(null); }
-    setReplayData(current => current && !evidenceMatches(current.epoch, current.sourceHash, snapshot.scene_epoch, repair?.source_hash, current.episodeId, snapshot.episode_id) ? null : current);
+    setReplayData(current => current && !current.archived && !evidenceMatches(current.epoch, current.sourceHash, snapshot.scene_epoch, repair?.source_hash, current.episodeId, snapshot.episode_id) ? null : current);
     setHeldout(current => current && !evidenceMatches(current.scene_epoch, current.policy_hash, snapshot.scene_epoch, repair?.source_hash, current.origin_episode_id, snapshot.episode_id) ? null : current);
     setSearch(current => current?.evaluation && !evidenceMatches(current.evaluation.scene_epoch, null, snapshot.scene_epoch, undefined, current.evaluation.episode_id, snapshot.episode_id) ? null : current);
     if (scrubState && (scrubState.scene_epoch !== snapshot.scene_epoch || scrubState.episode_id !== snapshot.episode_id)) { setScrubState(null); setScrubIndex(null); }
@@ -99,8 +97,9 @@ export default function App() {
 
   const execute = async (label: string, fn: () => Promise<void>) => {
     if (busy) return;
+    const version = ++executeVersion.current;
     setBusy(label); setError(''); setNotice('');
-    try { await fn(); } catch (cause) { setError(errorMessage(cause)); } finally { setBusy(''); }
+    try { await fn(); } catch (cause) { if(version===executeVersion.current)setError(errorMessage(cause)); } finally { if(version===executeVersion.current)setBusy(''); }
   };
   const baseline = () => void execute('Running baseline', async () => {
     setReplayData(null); setScrubIndex(null); setActiveTask('baseline');
@@ -125,8 +124,12 @@ export default function App() {
     if (result.evaluation?.frames?.length) acceptReplay(result.evaluation, result.scene, result.evaluation.scene_epoch, result.evaluation.episode_id);
   });
   const repairWithAstra = () => void execute('Astra is repairing', async () => {
+    const version = executeVersion.current;
+    pendingRepair.current = {previousId:repairRef.current?.id};
     setActiveTask('repair'); openInspector('source');
     const result = await request<RepairArtifact>('/api/repair', { mission }, 240_000);
+    if(version!==executeVersion.current)return;
+    pendingRepair.current = null;
     await workspace.refresh();
     if (!evidenceMatches(result.scene_epoch, null, workspace.currentEpoch(), undefined, result.origin_episode_id, workspace.currentEpisode())) throw new Error('The world changed during repair. This result cannot be played in the current scene.');
     if (repairRef.current && repairRef.current.id !== result.id && Date.parse(repairRef.current.created_at) > Date.parse(result.created_at)) throw new Error('A newer repair replaced this result. Replay the current repair instead.');
@@ -150,9 +153,20 @@ export default function App() {
     setActiveTask('repair');
     if (!snapshot || !repair) throw new Error('Load a current repair before replaying it.');
     const sceneEpoch = snapshot.scene_epoch; const sourceHash = repair.source_hash; const episodeId = snapshot.episode_id;
-    const result = await request<EvaluationResult | { evaluation: EvaluationResult }>('/api/replay', { repair_id: repair?.id }, 240_000);
-    const evaluation = 'evaluation' in result ? result.evaluation : result;
-    if (!evaluation?.frames?.length) throw new Error('This evaluation has no replay frames. Run an evaluation first.');
+    let evaluation = repair.evaluation;
+    if(!evaluation?.frames.length) {
+      const saved=await request<{artifacts:RepairArtifact[]}>('/api/artifacts');
+      evaluation=saved.artifacts.find(item=>item.id===repair.id&&item.source_hash===sourceHash)?.evaluation;
+    }
+    if (!evaluation?.frames?.length) throw new Error('Recorded trajectory is unavailable. The saved summary alone cannot be played. Run a fresh evaluation.');
+    if(evaluation.policy_hash!==sourceHash)throw new Error('Recorded trajectory does not match this repair source.');
+    if (!evidenceMatches(repair.scene_epoch, null, sceneEpoch, undefined, repair.origin_episode_id, episodeId)) {
+      if (!evaluation.scene) throw new Error('This older recording has no saved scene geometry and cannot be replayed safely.');
+      setReplayData({frames:evaluation.frames,scene:evaluation.scene,epoch:repair.scene_epoch,episodeId:repair.origin_episode_id!,sourceHash,archived:true});
+      setStageView('world');setReplayIndex(0);setReplaying(true);setScrubIndex(null);setScrubState(null);
+      setNotice('Archived repair playback in its saved world. This verdict does not apply to the current live scene.');
+      return;
+    }
     acceptReplay(evaluation, model?.scene ?? null, sceneEpoch, episodeId, sourceHash); setReplayIndex(0); setReplaying(true); setScrubIndex(null);
   });
   const reference = () => void execute('Starting reference from the scene origin', async () => {
@@ -169,6 +183,21 @@ export default function App() {
     acceptReplay(evaluation, evaluation.scene ?? null, heldout.scene_epoch, heldout.origin_episode_id, heldout.policy_hash);
     setReplayIndex(0); setReplaying(true); setScrubIndex(null);
   });
+  useEffect(() => {
+    if(!pendingRepair.current || busy!=='Astra is repairing' || health?.job!==null || !repair || repair.id===pendingRepair.current.previousId)return;
+    if(!['passed','failed','error'].includes(repair.status))return;
+    if(repair.status!=='error'&&!repairPlaybackIsCurrent(repair,workspace.currentEpoch(),workspace.currentEpisode())) {
+      if (!evidenceMatches(repair.scene_epoch,null,workspace.currentEpoch(),undefined,repair.origin_episode_id,workspace.currentEpisode())) {
+        pendingRepair.current=null;executeVersion.current++;setBusy('');
+        setNotice('Repair finished for an earlier world. Use Watch repaired run to inspect its saved experiment.');
+      }
+      return;
+    }
+    pendingRepair.current=null;executeVersion.current++;setBusy('');setActiveTask('repair');setTab('evidence');setError('');
+    if(repair.status==='error'){setError('Repair failed. Inspect the saved result and trace.');return;}
+    acceptReplay(repair.evaluation!,model?.scene??null,repair.scene_epoch,repair.origin_episode_id!,repair.source_hash);
+    setNotice(`Repair ${repair.status}. Playing its recorded evaluation.`);
+  },[repair,health?.job,busy]);
   useEffect(() => {
     let cancelled = false;
     const restoreSearch = async () => {
