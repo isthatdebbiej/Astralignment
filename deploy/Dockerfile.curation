@@ -10,4 +10,4 @@ COPY tests ./tests
 RUN npm run build
 ENV CURATION_DATA_DIR=/data CURATION_SOURCE_ROOT=/sources CURATION_AUTO_WORKER=0 CURATION_CONTAINER_LOCAL=1
 EXPOSE 8788
-CMD ["npm","run","curation:api"]
+CMD ["node","--import","tsx","gateway/curation/server.ts"]

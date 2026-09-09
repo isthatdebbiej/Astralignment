@@ -4,6 +4,16 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 export const now = () => new Date().toISOString();
 export const id = () => randomUUID();
+// PIDs are reused after container restarts. Linux start time plus boot ID
+// distinguishes a live owner from an unrelated process with the same PID.
+function processIdentity(pid:number):string|undefined {
+  if(process.platform!=='linux')return undefined;
+  try {
+    const stat=readFileSync(`/proc/${pid}/stat`,'utf8');
+    const start=stat.slice(stat.lastIndexOf(')')+2).split(' ')[19];
+    return readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim()+':'+start;
+  } catch {return undefined;}
+}
 export class Store {
   db:DatabaseSync;
   private lock:string;
@@ -16,10 +26,12 @@ export class Store {
     try{
       const old=JSON.parse(readFileSync(this.lock,'utf8'));
       let alive=true;try{process.kill(old.pid,0);}catch(e:any){if(e.code==='ESRCH')alive=false;}
+      const identity=processIdentity(old.pid);
+      if(alive&&old.process_identity&&identity&&old.process_identity!==identity)alive=false;
       if(alive)throw new Error('Another curation API owns this data directory');
       unlinkSync(this.lock);
     }catch(e:any){if(e.code!=='ENOENT')throw e;}
-    const lock=openSync(this.lock,'wx');writeFileSync(lock,JSON.stringify({pid:process.pid,owner:this.owner}));closeSync(lock);
+    const lock=openSync(this.lock,'wx');writeFileSync(lock,JSON.stringify({pid:process.pid,owner:this.owner,process_identity:processIdentity(process.pid)}));closeSync(lock);
     this.db=new DatabaseSync(path.join(directory,'curation.sqlite'));
     this.db.exec('PRAGMA max_page_count='+Math.floor(this.metadataLimit/4096)+'; PRAGMA journal_size_limit=16777216; PRAGMA wal_autocheckpoint=256;');
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;

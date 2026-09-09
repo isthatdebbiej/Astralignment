@@ -1,8 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,rmSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {Store} from '../../gateway/curation/store.js';
+test('Linux recovers a stale lock whose PID now belongs to another process',{skip:process.platform!=='linux'},()=>{
+ mkdirSync('runtime',{recursive:true});
+ const directory=mkdtempSync(path.resolve('runtime/curation-pid-reuse-'));
+ let store:Store|undefined;
+ try {
+  writeFileSync(path.join(directory,'curation.lock'),JSON.stringify({pid:process.pid,owner:'terminated owner',process_identity:'previous-boot:1'}));
+  store=new Store(directory);
+  assert.throws(()=>new Store(directory),/Another curation API/);
+  assert.equal(store.db.prepare('PRAGMA integrity_check').get()?.integrity_check,'ok');
+ }finally {store?.close();rmSync(directory,{recursive:true,force:true});}
+});
 test('one metadata writer, immutable records and SQLite quota failure remain recoverable',()=>{
  mkdirSync('runtime',{recursive:true});
  const directory=mkdtempSync(path.resolve('runtime/curation-store-test-'));

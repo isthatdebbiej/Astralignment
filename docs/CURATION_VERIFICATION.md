@@ -3,6 +3,28 @@
 Target: specification 0.3.0 implementation candidate. Local test date: 2026-09-09.
 This ledger does not qualify a public-data release or report training benefit.
 
+## Docker qualification on Windows, 2026-09-09
+
+Docker Desktop 4.90.0, Linux engine 29.7.2 and Compose 5.5.1 built and ran
+both CPU-only services. The pinned real BotFails episode below imported in
+8.64 seconds with 1,045 frames, two camera views and no integrity findings.
+Upstream verification, 64-row state/action preview, HTTP byte ranges, Chrome
+decoding of both cameras, collection freeze and annotation-preserving export
+passed. This is one real recording, not a corpus-scale benchmark.
+
+The first restart exposed a stale PID lock: npm did not forward termination
+to the API, and a reused container PID was mistaken for the previous owner.
+The image now starts Node directly. Linux locks include process start time and
+boot identity to distinguish PID reuse after forced termination. Both Linux
+store regression tests passed, including live-owner exclusion and PID reuse.
+After the fix, normal service restart and forced API restart preserved the
+source, episode, collection, frozen version and checksums of all three export
+artifacts. The legacy stale lock was removed only after both services stopped;
+the persistent data volume was retained.
+
+The app is published only on 127.0.0.1:8788. Human relevance review remains
+pending; an unreviewed 20-question template was prepared against this corpus.
+
 ## Follow-up qualification on the second Windows host
 
 Date: 2026-09-09. Windows x64, Intel Core i7-1265U, Node 22.16.0,
@@ -41,7 +63,7 @@ not unseen-task evaluation. Its original split remains preserved.
 
 Next: [release plan](CURATION_RELEASE_PLAN.md) and
 [Docker handoff](CURATION_DOCKER_CHECK.md). The user will perform human pilot
-review after Docker testing. Docker, macOS/Linux and deployed HTTPS were not run.
+review after Docker testing. Native macOS/Linux and deployed HTTPS were not run.
 
 ## Earlier implementation checks on the first Windows host
 
@@ -91,8 +113,8 @@ storage and larger-data performance still need measurement on the release host.
 - Twenty actual human-reviewed retrieval questions and evidence references,
   frozen before scoring. The runner/template are implemented; no human judgments
   or effort measurements were fabricated.
-- Docker build/runtime/restart testing on the other computer, explicitly deferred
-  at the user's request. Compose configuration is supplied, not certified.
+- Docker build/runtime/restart qualification passed above; broader failure and
+  representative-data coverage remains pending.
 - Native macOS/Linux and deployed reverse-proxy HTTPS qualification.
 - Representative-data resource tests and broader OS-kill/disk-full fault coverage.
   Existing stale-lease, quota, cancellation, restart and restore tests are not an
