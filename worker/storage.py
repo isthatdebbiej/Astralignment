@@ -17,8 +17,11 @@ class ExportBudget:
 
 class BoundedFile:
     def __init__(self, filename, budget):
+        filename = Path(filename)
+        previous = filename.stat().st_size if filename.exists() else 0
         self.file = open(filename, "wb")
         self.budget = budget
+        self.budget.used = max(0, self.budget.used - previous)
     @property
     def closed(self):
         return self.file.closed
@@ -34,8 +37,10 @@ class BoundedFile:
         os.fsync(self.file.fileno())
     def close(self):
         if not self.closed:
-            self.flush()
-            self.file.close()
+            try:
+                self.flush()
+            finally:
+                self.file.close()
     def __enter__(self):
         return self
     def __exit__(self, *_):

@@ -4,6 +4,11 @@ This is a small technical pilot, not proof of customer demand, generalization,
 training benefit, or alignment improvement. Use a verified public source
 selection, not the synthetic regression fixture.
 
+The user will review the 20 questions and relevance judgments after the Docker
+qualification check. The already verified single coffee episode is a technical
+reference, not an adequate diverse pilot corpus. Agree on the broader bounded
+selection first; leave the template unreviewed until actual inspection occurs.
+
 1. Import the chosen source selection and finish any planned source/reviewer
    annotations before freezing the corpus. Record source revisions and terms.
 2. Start the local API and prepare a new template:

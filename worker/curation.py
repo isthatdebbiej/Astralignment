@@ -162,6 +162,8 @@ def import_episode(source, record):
                 if meta["frames"] != frame_count:
                     findings.append("Decoded video frame count differs from episode length: "+item["kind"])
                 measured = meta["duration"]
+                stream["bounds"] = {"frames": meta["frames"] if meta["frames"] == frame_count else None,
+                                    "seconds": measured if measured is not None and measured > 0 else None}
                 if measured is not None and measured>0:
                     duration = measured if duration is None else min(duration, measured)
             except (OSError, ValueError, subprocess.SubprocessError, KeyError) as error:
@@ -372,6 +374,18 @@ def execute(job):
         ACTIVE_CANCEL = None
 
 if __name__ == "__main__":
+    if os.environ.get("CURATION_PARENT_PIPE")=="1":
+        def watch_parent():
+            # EOF also arrives when the native API is terminated by the OS.
+            # Exiting leaves durable jobs to lease reconciliation on restart.
+            while sys.stdin.buffer.read(1):pass
+            os._exit(0)
+        threading.Thread(target=watch_parent,daemon=True).start()
+    import duckdb
+    import pyarrow as pa
+    import av
+    pa.set_cpu_count(1)
+    pa.set_io_thread_count(1)
     if not TOKEN:
         raise SystemExit("CURATION_WORKER_TOKEN is required")
     DATA.mkdir(parents=True, exist_ok=True)

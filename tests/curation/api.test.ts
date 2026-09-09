@@ -49,13 +49,16 @@ test('curation: durable reviews, immutable collections, bounded intervals, searc
  const renamed=(await call('/collections/'+c.id,{revision:2,name:'Renamed fixture',intended_use:'inspection',members:updated.members},'PATCH')).data;
  assert.equal(renamed.name,'Renamed fixture');
  assert.equal((await call('/collections/'+c.id,{revision:1,members:[]},'PATCH')).status,409);
- const version=(await call('/collections/'+c.id+'/versions',{})).data;
+ assert.equal((await call('/collections/'+c.id+'/versions',{revision:2,review_ids:[first.id]})).status,409);
+ assert.equal((await call('/collections/'+c.id+'/versions',{})).status,400);
+ const version=(await call('/collections/'+c.id+'/versions',{revision:3,review_ids:[first.id]})).data;
  const second=(await call('/episodes/e1/reviews',{role:'unknown',rationale:'updated fixture review',evidence:['a1']})).data;
  assert.equal(second.supersedes,first.id);
  assert.equal((await call('/queries',{reviewed_role:'recovery'})).data.episodes.length,0);
  assert.equal((await call('/queries',{reviewed_role:'unknown',robot:'so100',source_label:'spilling',integrity:'no-findings'})).data.episodes.length,1);
  assert.equal((await call('/queries',{modality:'nonexistent'})).data.total,0);
- const later=(await call('/collections/'+c.id+'/versions',{})).data;
+ assert.equal((await call('/collections/'+c.id+'/versions',{revision:3,review_ids:[first.id]})).status,409);
+ const later=(await call('/collections/'+c.id+'/versions',{revision:3,review_ids:[first.id,second.id]})).data;
  assert.equal((await call('/collection-versions/'+version.id+'/compare/'+later.id)).data.reviews_added[0].id,second.id);
  assert.equal((await call('/collection-versions/'+version.id)).data.reviews.length,1);
  assert.equal((await call('/episodes/e1')).data.reviews.length,2);

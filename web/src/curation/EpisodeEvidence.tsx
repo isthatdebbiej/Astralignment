@@ -1,7 +1,7 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
-import type {Episode} from '../../../contracts/curation';
+import type {Episode,Review} from '../../../contracts/curation';
 import {StateInspector,type SampleSelection} from './StateInspector';
-export function EpisodeEvidence({episode}:{episode:Episode}){
+export function EpisodeEvidence({episode,reviews=[]}:{episode:Episode;reviews?:Review[]}){
  const [stream,setStream]=useState(()=>{const requested=new URLSearchParams(location.search).get('stream');return episode.streams.find(s=>s.id===requested)?.id??episode.streams[0]?.id??'';});
  const [frame,setFrame]=useState<number|null>(()=>{const raw=new URLSearchParams(location.search).get('frame');const value=Number(raw);return raw!==null&&Number.isInteger(value)&&value>=0&&value<episode.frames?value:null;}),[videoTime,setVideoTime]=useState<number|null>(null);
  const [mapping,setMapping]=useState('No source-backed video/state mapping selected.');
@@ -32,6 +32,8 @@ export function EpisodeEvidence({episode}:{episode:Episode}){
  onChange={e=>{const value=Number(e.target.value);setFrame(e.target.value!==''&&Number.isInteger(value)&&value>=0&&value<episode.frames?value:null);setMapping('Source annotation frame selected; video and robot samples were not interpolated or moved.');}}/></label>
  {annotations.map((a,i)=><p key={i}>Source category {a.label} · [{a.start_frame}, {a.end_frame}) <a href={'/api/v1/artifacts/'+a.evidence}>Annotation evidence</a></p>)}
  {frame!==null&&!annotations.length&&<p>No source annotation covers this frame.</p>}
+ {reviews.filter(r=>r.interval&&r.interval.stream_id===stream).map(r=><p key={r.id}>Reviewer: {r.role} · [{r.interval!.start}, {r.interval!.end}) {r.interval!.unit} · {r.rationale} {r.supersedes&&'(supersedes '+r.supersedes+')'}</p>)}
+ <p>Verified camera bounds: {active?.bounds?.frames??'unknown'} frames · {active?.bounds?.seconds??'unknown'} seconds.</p>
  <p>Gaps remain gaps. Unknown clock relationships are never replaced by a zero offset.</p>
  <StateInspector episode={episode} onSample={select} desiredFrame={frame}/>
  </details>

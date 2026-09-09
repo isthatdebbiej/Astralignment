@@ -3,7 +3,47 @@
 Target: specification 0.3.0 implementation candidate. Local test date: 2026-09-09.
 This ledger does not qualify a public-data release or report training benefit.
 
-## Executed locally
+## Follow-up qualification on the second Windows host
+
+Date: 2026-09-09. Windows x64, Intel Core i7-1265U, Node 22.16.0,
+Python 3.13.15, DuckDB 1.4.0, PyArrow 21.0.0 and PyAV 16.0.1.
+The initial DuckDB DLL import failure was resolved with a local Microsoft C++
+runtime; no application dependency versions were changed.
+
+Fresh checks passed: production build; 10 curation TypeScript tests; 9 Python
+tests; all 39 prototype TypeScript regressions; expanded Chrome journey.
+New coverage includes stale draft/review publication, GET filters, measured
+stream interval bounds, unsubmitted-query provenance, actual interval review,
+version reload, focus return, native worker restart exhaustion/retry, termination
+of the actual native API without an orphan worker, persisted collection recovery,
+OS-killed metadata-writer recovery and the read-only restart smoke checker.
+Python tests also cover acquisition confirmation/content identities, staging
+quota reuse and injected ENOSPC on flush. ENOSPC injection is not a real full-volume
+or power-loss test.
+
+A real pinned BotFails selection passed opt-in qualification:
+`test/domotic_makingCoffee_anomaly`, episode 0, revision
+`3478e49d91e1737eb76dfee2d81bb22617039c13`. Seven original files,
+25,557,340 bytes; 25,560,593 bytes including the verification receipt.
+Upstream Git/LFS identities matched. Import produced one logical episode,
+two camera views, 1,045 frames and no integrity findings. Original Parquet
+sample rows and CSV categories matched imported evidence; both real AV1
+videos decoded in Chrome. The frozen manifest/export matched the selection.
+No semantic human review was performed or invented.
+
+The final run measured 6.90 s import, 2.07 s first preview, warm-query p50/p95
+3.52/4.88 ms, process-lifetime worker peak RSS 75,268,096 bytes, and 408,217
+derived-directory bytes during the run. See the checked-in
+[reference report](evaluation/public-reference-2026-09-09.json).
+This is one recording, not representative corpus scale; OS caches were not
+flushed. The consumed source test episode is development qualification evidence,
+not unseen-task evaluation. Its original split remains preserved.
+
+Next: [release plan](CURATION_RELEASE_PLAN.md) and
+[Docker handoff](CURATION_DOCKER_CHECK.md). The user will perform human pilot
+review after Docker testing. Docker, macOS/Linux and deployed HTTPS were not run.
+
+## Earlier implementation checks on the first Windows host
 
 Host: Windows x64, Intel Core i5-9300H CPU @ 2.40 GHz, Node 22.16.0,
 Python 3.13.1. Worker: DuckDB 1.4.0, PyArrow 21.0.0, PyAV 16.0.1.
@@ -45,9 +85,9 @@ storage and larger-data performance still need measurement on the release host.
 
 ## Pending qualification
 
-- A real pinned BotFails selection imported and independently matched to upstream
-  content identities. The verifier implementation was tested with metadata stubs,
-  not a claimed public-corpus run.
+- Broader public-data selection and representative-corpus performance. The
+  single pinned episode described above is now checked; it does not qualify the
+  entire dataset or all modalities/task families.
 - Twenty actual human-reviewed retrieval questions and evidence references,
   frozen before scoring. The runner/template are implemented; no human judgments
   or effort measurements were fabricated.

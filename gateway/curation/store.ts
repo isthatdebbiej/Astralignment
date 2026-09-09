@@ -44,6 +44,20 @@ export class Store {
   count(kind:string):number {
     return Number(this.db.prepare('SELECT count(*) AS n FROM records WHERE kind=?').get(kind)?.n??0);
   }
+  activeJobs<T=any>():T[]{
+    return this.db.prepare("SELECT data FROM records WHERE kind='job' AND json_extract(data,'$.status') IN ('queued','running') ORDER BY rowid ASC").all().map(r=>JSON.parse(String(r.data)));
+  }
+  reconcileJobs(time=Date.now(),leaseMs=60000){
+    this.transaction(()=>{
+      for(const j of this.activeJobs())if(j.status==='running'&&time-Date.parse(j.updated_at)>leaseMs){
+        j.history=[...(j.history??[]),{attempt:j.attempt,status:'lease-expired',at:new Date(time).toISOString()}];
+        j.status=j.attempt>=3?'failed':'queued';j.updated_at=new Date(time).toISOString();
+        j.stage=j.status==='queued'?'Waiting for worker after expired lease':'Worker unavailable';
+        if(j.status==='failed')j.error='Worker lease expired three times; inspect the worker and retry';
+        this.put('job',j.id,j);
+      }
+    });
+  }
   matching<T=any>(kind:string,field:string,value:string,limit=40,offset=0):T[]{
     return this.db.prepare('SELECT data FROM records WHERE kind=? AND json_extract(data,?)=? ORDER BY rowid DESC LIMIT ? OFFSET ?')
       .all(kind,'$.'+field,value,limit,offset).map(row=>JSON.parse(String(row.data)));

@@ -24,7 +24,7 @@ export function StateInspector({episode,onSample,desiredFrame}:{episode:Episode;
  return()=>{active=false;clearInterval(timer);};
  },[job?.id,job?.status]);
  async function load(offset:number){setError('');setRequesting(true);try{setJob(await curationApi('/episodes/'+episode.id+'/samples',{offset,limit:64}));}catch(e){setError((e as Error).message);}finally{setRequesting(false);}}
- return <details><summary>Recorded state/action inspector</summary>
+ return <details onToggle={event=>{if(!event.currentTarget.open&&activeJob.current&&['queued','running'].includes(activeJob.current.status))void curationApi('/jobs/'+activeJob.current.id+'/cancel',{}).then(setJob).catch(e=>setError(e.message));}}><summary>Recorded state/action inspector</summary>
  <p>Reads up to 64 original rows per page. The cursor follows file order, not an inferred synchronized clock.</p>
  {!episode.artifacts.some(a=>a.kind==='state/action')?<p>No recorded state/action artifact.</p>:<>
  <button disabled={!!pending||requesting} onClick={()=>void load(0)}>Inspect recorded samples</button>

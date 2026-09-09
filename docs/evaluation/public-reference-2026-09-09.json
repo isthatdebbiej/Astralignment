@@ -1,0 +1,43 @@
+{
+  "status": "passed",
+  "fixture": false,
+  "revision": "3478e49d91e1737eb76dfee2d81bb22617039c13",
+  "task": "domotic_makingCoffee_anomaly",
+  "source_episode": "0",
+  "frames": 1045,
+  "views": 2,
+  "findings": [],
+  "upstream_verification": {
+    "mode": "upstream-hashes-verified",
+    "receipt_sha256": "7e4587ddcd36d805aef73a1c2dfab3604591f6c6dca320f516098ad79e04320a",
+    "verified_at": "2026-09-09T17:08:48.094137+00:00"
+  },
+  "host": {
+    "platform": "win32",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1265U",
+    "node": "v22.16.0"
+  },
+  "measurements": {
+    "selected_bytes": 25560593,
+    "import_ms": 6902.7548,
+    "first_preview_ms": 2066.575600000001,
+    "warm_query_p50_ms": 3.521999999999025,
+    "warm_query_p95_ms": 4.879899999999907,
+    "worker_lifetime_peak_rss_bytes": 75268096,
+    "derived_directory_bytes": 408217
+  },
+  "limitations": [
+    "One real episode; not representative corpus scale",
+    "No human judgments or policy training",
+    "OS caches were not flushed; first access is not a certified cold-cache measurement"
+  ],
+  "date": "2026-09-09",
+  "checks": [
+    "Pinned upstream Git/LFS hashes",
+    "Two AV1 cameras decoded in Chrome",
+    "Original Parquet sample rows and CSV categories compared",
+    "Immutable selection manifest compared",
+    "Authorized media range read"
+  ],
+  "runner": "tests/curation/public.qa.ts"
+}

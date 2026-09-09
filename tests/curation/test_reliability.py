@@ -5,6 +5,8 @@ import tempfile
 import threading
 import unittest
 import sys
+import errno
+from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).parents[2]/"worker"))
 from backup import backup,restore,verify
 from storage import ExportBudget,BoundedFile
@@ -25,6 +27,19 @@ class ReliabilityTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"quota"):
                 output.write(b"12345")
         self.assertEqual((self.root/"bounded.tmp").read_bytes(),b"1234")
+    def test_retry_reuses_staging_budget_without_double_counting(self):
+        target=self.root/"staged.tmp";target.write_bytes(b"12345678")
+        budget=ExportBudget(self.root,8)
+        with BoundedFile(target,budget) as output:output.write(b"abcdefgh")
+        self.assertEqual(target.read_bytes(),b"abcdefgh")
+    def test_disk_full_flush_closes_file_and_preserves_committed_data(self):
+        committed=self.root/"committed.json";committed.write_bytes(b"preserve")
+        output=BoundedFile(self.root/"incomplete.tmp",ExportBudget(self.root,1024))
+        output.write(b"incomplete")
+        with patch("storage.os.fsync",side_effect=OSError(errno.ENOSPC,"disk full")):
+            with self.assertRaises(OSError):output.close()
+        self.assertTrue(output.closed)
+        self.assertEqual(committed.read_bytes(),b"preserve")
     def test_backup_rejects_active_writer_and_corruption(self):
         data=self.root/"data";data.mkdir()
         conn=sqlite3.connect(data/"curation.sqlite")
