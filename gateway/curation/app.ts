@@ -17,13 +17,23 @@ export function contained(root:string,relative:string) {
   if(rel==='..'||rel.startsWith('..'+path.sep)||path.isAbsolute(rel))throw new Error('Path escapes source root');
   return resolved;
 }
-export function createCurationApp(store:Store, sourceRoot:string, workerToken:string) {
+export function createCurationApp(store:Store, sourceRoot:string, workerToken:string,controls?:{state:()=>{status:string;message:string;can_restart:boolean;pid?:number|null};restart:()=>void}) {
   const app=express(); app.disable('x-powered-by'); app.use(express.json({limit:'2mb'}));
   app.use('/api/v1',curationAccess(workerToken));
+  let lastWorkerContact=0;
+  app.use('/api/v1/internal',(_q,_r,next)=>{lastWorkerContact=Date.now();next();});
+  const workerHealth=()=>{
+    const native=controls?.state();const recent=Date.now()-lastWorkerContact<30000;
+    const available=recent&&(!native||native.status==='running');
+    return {status:available?'available':native?.status==='running'?'unavailable':native?.status??'unavailable',
+      message:available?'CPU worker is responding.':native?.message??'No recent worker contact. Start the worker service; committed data remains available.',
+      last_contact:lastWorkerContact?new Date(lastWorkerContact).toISOString():null,can_restart:native?.can_restart??false,pid:native?.pid??null};
+  };
+  app.post('/api/v1/worker/restart',(_q,r)=>{if(!controls)throw new Error('Restart the externally managed worker service');controls.restart();r.json(workerHealth());});
   const verifyArtifact=artifactVerifier();
   function required(kind:string,key:string) {const item=store.get(kind,key);if(!item)throw Object.assign(new Error('Resource not found'),{status:404});return item;}
   function job(kind:Job['kind'],payload:Record<string,unknown>) {
-    if(store.all<Job>('job').filter(j=>['queued','running'].includes(j.status)).length>=16)throw new Error('Worker queue is full');
+    if(store.activeJobs().length>=16)throw new Error('Worker queue is full');
     const j:Job={id:id(),kind,payload,status:'queued',stage:'queued',progress:0,attempt:0,created_at:now(),updated_at:now(),error:null,result:null};
     store.put('job',j.id,j);return j;
   }
@@ -31,8 +41,8 @@ export function createCurationApp(store:Store, sourceRoot:string, workerToken:st
     const e=required('episode',m.episode_id) as Episode;
     if(m.interval) {
       const i=m.interval,stream=e.streams.find(s=>s.id===i.stream_id);
-      const bound=i.unit==='frames'?e.frames:e.duration;
-      if(!stream||bound===null||i.start>=i.end||i.end>bound)throw new Error('Invalid or unverified interval bounds');
+      const bound=i.unit==='frames'?stream?.bounds?.frames:stream?.bounds?.seconds;
+      if(bound==null||i.start>=i.end||i.end>bound)throw new Error('Invalid or unverified stream interval bounds; reinspect older sources to verify media');
       if(i.unit==='frames'&&(!Number.isInteger(i.start)||!Number.isInteger(i.end)))throw new Error('Frame bounds must be integers');
     }return e;
   }
@@ -43,7 +53,7 @@ export function createCurationApp(store:Store, sourceRoot:string, workerToken:st
     export_limit_bytes:Number(process.env.CURATION_EXPORT_MAX_BYTES??1073741824),import_limit_bytes:Number(process.env.CURATION_MAX_IMPORT_BYTES??21474836480),
     metadata_file_bytes:statSync(path.join(store.directory,'curation.sqlite')).size,
     filesystem_available_bytes:Number(statfsSync(store.directory).bavail)*Number(statfsSync(store.directory).bsize),
-    models_required:false,backup:'Cold backup: worker/backup.py; stop both services first',remote_auth_configured:!!process.env.CURATION_PUBLIC_ORIGIN}));
+    models_required:false,worker:workerHealth(),backup:'Cold backup: worker/backup.py; stop both services first; choose an explicit destination',remote_auth_configured:!!process.env.CURATION_PUBLIC_ORIGIN}));
   app.get('/api/v1/evaluation-state',(q,r)=>{
     const project=String(q.query.project_id??'default');required('project',project);
     const fingerprint=createHash('sha256');let episodes=0;
@@ -58,7 +68,11 @@ export function createCurationApp(store:Store, sourceRoot:string, workerToken:st
     }
     r.json({project_id:project,corpus_fingerprint:fingerprint.digest('hex'),source_revisions:revisions,episodes,search_version:'fts5-0.3.0',protocols:['metadata','annotations']});
   });
-  app.get('/api/v1/sources',(q,r)=>{const p=pagination(q.query);r.setHeader('X-Total-Count',store.count('source'));r.json(q.query.project_id?store.matching('source','project_id',String(q.query.project_id),p.limit,p.offset):store.page('source',p.limit,p.offset));});
+  const sourceSummary=(source:any)=>{
+    const counts=store.db.prepare("SELECT count(*) AS imported,coalesce(sum(json_array_length(data,'$.findings')>0),0) AS with_findings FROM records WHERE kind='episode' AND json_extract(data,'$.source_id')=?").get(source.id);
+    return {...source,quality:{planned:source.plan?.episodes.length??null,imported:Number(counts?.imported??0),with_findings:Number(counts?.with_findings??0)}};
+  };
+  app.get('/api/v1/sources',(q,r)=>{const p=pagination(q.query);r.setHeader('X-Total-Count',store.count('source'));r.json((q.query.project_id?store.matching('source','project_id',String(q.query.project_id),p.limit,p.offset):store.page('source',p.limit,p.offset)).map(sourceSummary));});
   app.post('/api/v1/projects/:project/sources',(q,r)=>{
     required('project',q.params.project);
     const data=z.object({name:z.string().min(1).max(120),snapshot:z.string().min(1),revision:z.literal(BOTFAILS_REVISION),
@@ -92,7 +106,8 @@ export function createCurationApp(store:Store, sourceRoot:string, workerToken:st
       project_id:z.string().optional(),source_id:z.string().optional(),task:z.string().optional(),split:z.string().optional(),
       robot:z.string().optional(),modality:z.string().optional(),source_label:z.string().optional(),
       reviewed_role:z.enum(REVIEW_ROLES).optional(),integrity:z.enum(['findings','no-findings']).optional(),
-      offset:z.number().int().nonnegative().default(0),limit:z.number().int().min(1).max(100).default(40)}).parse(body);
+      sort:z.enum(['relevance','task','split']).default('relevance'),
+      offset:z.coerce.number().int().nonnegative().default(0),limit:z.coerce.number().int().min(1).max(100).default(40)}).strict().parse(body);
     const terms=b.text.match(/[\p{L}\p{N}_-]+/gu)??[];
     let sql='SELECT id FROM episode_index WHERE 1=1'; const args:any[]=[];let ftsQuery:string|undefined;
     for(const key of ['project_id','source_id','task','split'] as const)if(b[key]){sql+=' AND '+key+'=?';args.push(b[key]);}
@@ -103,10 +118,11 @@ export function createCurationApp(store:Store, sourceRoot:string, workerToken:st
     if(b.integrity)sql+=" AND id IN (SELECT id FROM records WHERE kind='episode' AND json_array_length(data,'$.findings')"+(b.integrity==='findings'?'>0':'=0')+")";
     if(terms.length){ftsQuery=(b.mode==='metadata'?'metadata':'{metadata annotations}')+' : '+terms.map(t=>'"'+t+'"').join(' AND ');sql+=' AND id IN (SELECT id FROM episode_fts WHERE episode_fts MATCH ?)';args.push(ftsQuery);}
     const total=Number(store.db.prepare('SELECT count(*) AS n FROM ('+sql+')').get(...args)?.n??0);
-    if(ftsQuery){sql+=' ORDER BY (SELECT rank FROM episode_fts WHERE episode_fts MATCH ? AND episode_fts.id=episode_index.id),id';args.push(ftsQuery);}else sql+=' ORDER BY id';
+    if(b.sort==='task'||b.sort==='split')sql+=' ORDER BY '+b.sort+',id';
+    else if(ftsQuery){sql+=' ORDER BY (SELECT rank FROM episode_fts WHERE episode_fts MATCH ? AND episode_fts.id=episode_index.id),id';args.push(ftsQuery);}else sql+=' ORDER BY id';
     sql+=' LIMIT ? OFFSET ?';args.push(b.limit,b.offset);
     return {mode:b.mode,disclosure:b.mode==='metadata'?'Task identifier, robot and split only. Not label-hidden prediction.':'Includes source task text, annotations and reviewer labels.',
-      total,offset:b.offset,limit:b.limit,annotation_filters_used:!!(b.source_label||b.reviewed_role),
+      total,offset:b.offset,limit:b.limit,sort:b.sort,coverage:'Only committed indexed episodes are searched. Pending/unimported files and video content are not searched.',annotation_filters_used:!!(b.source_label||b.reviewed_role),
       episodes:store.db.prepare(sql).all(...args).map(row=>{
         const e=required('episode',String(row.id));
         const indexed=store.db.prepare('SELECT metadata,annotations FROM episode_index WHERE id=?').get(e.id);
@@ -120,7 +136,7 @@ export function createCurationApp(store:Store, sourceRoot:string, workerToken:st
       })};
   };
   app.post('/api/v1/queries',(q,r)=>r.json(search(q.body)));
-  app.get('/api/v1/episodes',(q,r)=>r.json(search(pagination(q.query))));
+  app.get('/api/v1/episodes',(q,r)=>r.json(search(q.query)));
   app.get('/api/v1/episodes/:id',(q,r)=>{const e=required('episode',q.params.id),s=required('source',e.source_id);r.json({...e,source_summary:{name:s.name,revision:s.revision,license:s.license,verification:s.plan?.verification??null},reviews:store.all<any>('review').filter(v=>v.episode_id===q.params.id)});});
   app.get('/api/v1/episodes/:id/intervals',(q,r)=>r.json({source:required('episode',q.params.id).annotations,reviews:store.all<any>('review').filter(v=>v.episode_id===q.params.id&&v.interval)}));
   app.post('/api/v1/episodes/:id/samples',(q,r)=>{
@@ -175,9 +191,14 @@ export function createCurationApp(store:Store, sourceRoot:string, workerToken:st
     const updated={...c,...b,revision:c.revision+1};store.put('collection',c.id,updated);r.json(updated);
   });
   app.post('/api/v1/collections/:id/versions',(q,r)=>{
+    const expected=z.object({revision:z.number().int().positive(),review_ids:z.array(z.string()).max(10000)}).strict().parse(q.body);
+    const published=store.transaction(()=>{
     const c=required('collection',q.params.id) as Collection;
+    if(c.revision!==expected.revision)throw Object.assign(new Error('Collection changed; reload and review before publishing'),{status:409});
     if(!c.members.length)throw new Error('Select at least one episode');
     const episodes=[...new Set(c.members.map(m=>m.episode_id))].map(e=>required('episode',e));
+    const reviews=store.all<any>('review').filter(v=>episodes.some(e=>e.id===v.episode_id));
+    if(JSON.stringify(reviews.map(v=>v.id).sort())!==JSON.stringify([...expected.review_ids].sort()))throw Object.assign(new Error('Reviews changed; reload and review before publishing'),{status:409});
     const families=new Map<string,string>();
     for(const e of episodes){if(families.has(e.family_id)&&families.get(e.family_id)!==e.id)throw new Error('The same source family appears through multiple source revisions');families.set(e.family_id,e.id);}
     c.members.forEach(validateMember);
@@ -190,11 +211,12 @@ export function createCurationApp(store:Store, sourceRoot:string, workerToken:st
         selection_only:true,plan:{...source.plan,files,episodes:[],estimated_bytes:files.reduce((sum:number,f:any)=>sum+f.bytes,0)}};
     });
     const v={id:id(),collection_id:c.id,created_at:now(),schema_version:'1.0.0',collection:c,episodes,sources,
-      reviews:store.all<any>('review').filter(v=>episodes.some(e=>e.id===v.episode_id)),
+      reviews,
       integrity:episodes.some(e=>e.findings.length)?'findings present':'import checks passed',
       training_suitability:'unknown',measured_training_benefit:'not evaluated'};
     if(Buffer.byteLength(JSON.stringify(v))>8*1024*1024)throw new Error('Collection snapshot exceeds the 8 MiB admission limit; select fewer episodes');
-    store.put('version',v.id,v);r.status(201).json(v);
+    store.put('version',v.id,v);return v;
+    });r.status(201).json(published);
   });
   app.get('/api/v1/collection-versions/:id',(q,r)=>r.json(required('version',q.params.id)));
   app.get('/api/v1/collection-versions/:id/compare/:other',(q,r)=>{
@@ -221,15 +243,10 @@ export function createCurationApp(store:Store, sourceRoot:string, workerToken:st
     r.sendFile(filename,{acceptRanges:true,dotfiles:'deny',headers:{'Content-Type':type,'Cache-Control':'private, no-cache','X-Content-Type-Options':'nosniff','Content-Security-Policy':"sandbox; default-src 'none'"}});
   });
   app.post('/api/v1/internal/claim',(_q,r)=>{
-    const jobs=store.all<any>('job');
-    for(const j of jobs)if(j.status==='running'&&Date.now()-Date.parse(j.updated_at)>60000){
-      j.history=[...(j.history??[]),{attempt:j.attempt,status:'lease-expired',at:now()}];
-      j.status=j.attempt>=3?'failed':'queued';
-      if(j.status==='failed')j.error='Worker lease expired three times; inspect resource or input failures before retrying';
-      store.put('job',j.id,j);
-    }
+    store.reconcileJobs();
+    const jobs=store.activeJobs();
     if(jobs.some(j=>j.status==='running'))return r.status(204).end();
-    const j=jobs.reverse().find(j=>j.status==='queued');
+    const j=jobs.find(j=>j.status==='queued');
     if(!j)return r.status(204).end();
     j.status='running';j.attempt++;j.updated_at=now();
     j.history=[...(j.history??[]),{attempt:j.attempt,status:'started',at:j.updated_at}];
@@ -279,7 +296,7 @@ export function createCurationApp(store:Store, sourceRoot:string, workerToken:st
         task:z.string(),split:z.enum(['test','normal_train']),origin:z.enum(['public recording','fixture']),robot:z.string().nullable(),
         duration:z.number().positive().nullable(),fps:z.number().positive().nullable(),frames:z.number().int().positive(),
         upstream_splits:z.record(z.string(),z.string()),task_text:z.array(z.string()),channels:z.array(z.string()),
-        artifacts:z.array(artifact).max(64),streams:z.array(z.object({id:z.string(),kind:z.string(),artifact_id:z.string(),timing:z.string()}).strict()).max(32),
+        artifacts:z.array(artifact).max(64),streams:z.array(z.object({id:z.string(),kind:z.string(),artifact_id:z.string(),timing:z.string(),bounds:z.object({frames:z.number().int().positive().nullable(),seconds:z.number().positive().nullable()}).strict().optional()}).strict()).max(32),
         annotations:z.array(z.object({label:z.string(),start_frame:z.number().int().nonnegative(),end_frame:z.number().int().positive(),evidence:z.string()}).strict()).max(100000),
         findings:z.array(z.string())}).strict().parse(q.body.episode);
       for(const a of e.artifacts){

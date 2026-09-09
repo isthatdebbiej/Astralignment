@@ -8,7 +8,7 @@ export interface Episode {
   task: string; split: string; origin: 'public recording' | 'fixture';
   robot: string | null; duration: number | null; fps: number | null;
   frames: number; upstream_splits: Record<string,string>; task_text: string[];
-  streams: Array<{id:string; kind:string; artifact_id:string; timing:string}>;
+  streams: Array<{id:string; kind:string; artifact_id:string; timing:string; bounds?:{frames:number|null;seconds:number|null}}>;
   artifacts: Artifact[]; annotations: Array<{label:string; start_frame:number; end_frame:number; evidence:string}>;
   findings: string[]; channels: string[]; latest_review?: Review; match_reasons?:string[];
 }
@@ -19,6 +19,7 @@ export interface Review {
 export interface Source {
   id:string; project_id:string; name:string; snapshot:string; revision:string; license:string;
   tasks:string[]; episode_indices?:number[]; status:string; origin:'public recording'|'fixture'; created_at:string;
+  quality?:{planned:number|null;imported:number;with_findings:number};
   plan?:{estimated_bytes:number; files:Array<{path:string;bytes:number|null;sha256:string}>; episodes:unknown[]; findings:string[];verification?:{mode:string;receipt_sha256?:string}};
 }
 export interface CollectionMember { episode_id:string; interval:EvidenceInterval|null; }

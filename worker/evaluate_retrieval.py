@@ -42,7 +42,8 @@ def evaluate(pilot, base):
                 raise ValueError("Evidence is not in the frozen source corpus")
             interval=evidence.get("interval")
             if interval is not None:
-                bound=episode["frames"] if interval.get("unit")=="frames" else episode.get("duration")
+                stream=next((s for s in episode["streams"] if s["id"]==interval.get("stream_id")),{})
+                bound=stream.get("bounds",{}).get(interval.get("unit"))
                 start,end=interval.get("start"),interval.get("end")
                 if interval.get("unit") not in ("frames","seconds") or not any(s["id"]==interval.get("stream_id") for s in episode["streams"]) or not isinstance(start,(int,float)) or not isinstance(end,(int,float)) or bound is None or not 0<=start<end<=bound:
                     raise ValueError("Evidence interval has invalid or unknown bounds")

@@ -238,6 +238,14 @@ These resources are implemented under /api/v1. Shared types are in
 contracts/curation.ts; runtime schemas are in gateway/curation/app.ts.
 See the verification ledger for outstanding release qualification.
 
+Publishing `/collections/{id}/versions` requires `{revision, review_ids}` from
+the inspected draft detail; both are compared transactionally before freezing.
+GET `/episodes` accepts the same filters and sort as POST `/queries` (numeric
+pagination is coerced from query strings); unknown filters are rejected.
+Stream `bounds.frames`/`bounds.seconds` are measured nullable bounds; absent
+legacy bounds cannot validate a new interval. Native worker status appears in
+`/settings`; `/worker/restart` retries only an exhausted native supervisor.
+
 | Resource / operation | Required behavior |
 | --- | --- |
 | POST /projects/{id}/sources | Register a resolved source revision and selected-file/byte manifest; no download as a side effect |

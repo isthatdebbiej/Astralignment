@@ -18,6 +18,12 @@ prints an experimental-API warning. Python dependencies are pinned in
 PyAV supplies video decoding; the application does not require ffprobe on PATH.
 Use a local SSD, not OneDrive or a network share, for the SQLite directory.
 
+Windows also requires the Microsoft Visual C++ runtime used by DuckDB. Check
+`python -c "import duckdb, pyarrow, av"` with the chosen virtual environment
+before starting the API. A missing native DLL is a setup failure, not an import
+quality finding to ignore. The worker fails startup when dependencies cannot
+load; the native API reports bounded restart exhaustion and offers Restart worker.
+
 PowerShell, from the repository:
 
 ```powershell
@@ -43,6 +49,14 @@ Open [Library](http://127.0.0.1:5173/curation). For a built interface, run
 [port 8788](http://127.0.0.1:8788/curation). This starts one API-owned CPU worker,
 not the prototype gateway. Native execution was tested on Windows; other-host
 instructions and Compose still need qualification.
+
+See [the current release plan](CURATION_RELEASE_PLAN.md) and
+[Docker qualification handoff](CURATION_DOCKER_CHECK.md) for the next-host checks.
+`worker/acquire_reference.py` plans a bounded, pinned real reference selection;
+it downloads recordings only with an exact `--confirm-bytes` argument.
+`npm run test:curation:public` is opt-in and requires `CURATION_PUBLIC_SNAPSHOT`;
+it verifies upstream identities, original rows/categories, browser decoding and
+immutable export. It does not perform semantic human review.
 
 ## Acquire and register a small source selection
 
@@ -79,8 +93,8 @@ The verifier compares selected local files with the pinned Hugging Face tree's
 LFS SHA-256 or Git blob identities, fetching metadata only. It creates an
 exclusive verification receipt inside the snapshot. Reinspect as a new source
 revision to attach that receipt; existing approved manifests remain immutable.
-The verification helper has fixture tests; no public snapshot was qualified
-during this implementation.
+The verification helper has fixture tests and a real one-episode reference run;
+see the verification ledger for its exact scope and pending broader qualification.
 
 ## Evidence, search, and collections
 
@@ -102,6 +116,12 @@ supersession history. Source annotations are never edited. Collections preserve
 explicit membership, exclusions, declared use, selection provenance, family
 grouping, source revisions, and frozen review records. Draft revision conflicts
 require reloading. Published versions can be compared and exported independently.
+
+Publication now requires both the displayed draft `revision` and its exact
+`review_ids` array. If either changed, the API returns 409 and the operator must
+reload and review before publishing. Interval selection uses the chosen stream's
+measured bounds; older source records lacking those bounds require reinspection.
+Frame review/selection fields and the selected frozen version survive URL reload.
 
 Exports contain a versioned manifest and matching JSONL/Parquet annotations,
 source references/checksums, original splits, family IDs, and provenance.

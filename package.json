@@ -7,6 +7,8 @@
     "dev:curation": "concurrently -k -n curation,web \"npm:curation:api\" \"vite --host 127.0.0.1\"",
     "curation:api": "tsx gateway/curation/server.ts",
     "test:curation": "tsx --test tests/curation/*.test.ts",
+    "test:curation:browser": "tsx tests/curation/browser.qa.ts",
+    "test:curation:public": "tsx tests/curation/public.qa.ts",
     "dev": "concurrently -k -n gateway,web \"npm:dev:gateway\" \"npm:dev:web\"",
     "dev:web": "vite --host 0.0.0.0",
     "dev:gateway": "tsx watch gateway/index.ts",

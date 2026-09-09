@@ -14,7 +14,7 @@ class WorkerTests(unittest.TestCase):
         temporary_root = Path(__file__).parents[2] / "runtime"
         temporary_root.mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=temporary_root, prefix="curation-fixture-") as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             worker.ROOT = root / "sources"
             worker.DATA = root / "data"
             worker.DATA.mkdir()

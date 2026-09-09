@@ -65,7 +65,7 @@ test('CPU end-to-end: real media, sample references, immutable exports, restart 
  const review=await request('/episodes/'+episode.id+'/reviews',{role:'unknown',rationale:'Synthetic fixture only',evidence:[episode.artifacts[0].id],interval:null});
  const collection=await request('/projects/default/collections',{name:'Frozen fixture',intended_use:'pipeline evaluation'});
  await request('/collections/'+collection.id,{revision:1,members:[{episode_id:episode.id,interval:null}]},'PATCH');
- const version=await request('/collections/'+collection.id+'/versions',{});
+ const version=await request('/collections/'+collection.id+'/versions',{revision:2,review_ids:[review.id]});
  const exportJob=await waitJob((await request('/collection-versions/'+version.id+'/exports',{})).id);
  assert.equal(exportJob.result.artifacts.length,3);
  const manifestArtifact=exportJob.result.artifacts.find((a:any)=>a.kind==='manifest.json');

@@ -73,6 +73,9 @@ try{
  await expect(page.getByText(/Linked by the source row/)).toBeVisible();
  await expect.poll(()=>page.locator('video').evaluate((v:HTMLVideoElement)=>Math.abs(v.currentTime-2/30))).toBeLessThan(.01);
  await page.getByLabel('Rationale',{exact:true}).fill('Synthetic fixture review; not a training-quality judgment.');
+ await page.getByLabel('Scope',{exact:true}).selectOption('interval');
+ await page.getByLabel('Start frame',{exact:true}).fill('1');
+ await page.getByLabel('End frame (exclusive)',{exact:true}).fill('3');
  await page.getByRole('button',{name:'Save review',exact:true}).click();
  await expect(page.getByText('Review saved. Earlier revisions remain available.')).toBeVisible();
  await page.getByText('Add this episode or interval to a collection',{exact:true}).click();
@@ -86,6 +89,9 @@ try{
  await page.getByRole('button',{name:/Browser fixture collection/}).click();
  await expect(page.getByRole('button',{name:'Freeze immutable version'})).toBeEnabled();
  await page.getByRole('button',{name:'Freeze immutable version'}).click();
+ await page.getByRole('button',{name:'Inspect frozen version',exact:true}).click();
+ await expect(page.getByRole('region',{name:'Frozen version'})).toBeVisible();
+ await expect(page).toHaveURL(/version=/);
  await expect(page.getByRole('button',{name:'Export selection',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Export selection',exact:true}).click();
  await page.locator('summary').filter({hasText:/^Jobs /}).click();
@@ -93,12 +99,33 @@ try{
  const href=await page.getByRole('link',{name:'manifest.json',exact:true}).getAttribute('href');
  const exported=await (await context.request.get('http://127.0.0.1:'+port+href)).json();
  if(exported.collection.members[0].interval.start!==1||exported.episodes[0].origin!=='fixture')throw new Error('Browser selection did not match exported manifest');
+ if(exported.reviews[0].interval.start!==1)throw new Error('Interval review did not reach the frozen export');
  await page.getByText('Settings',{exact:true}).click();
  await page.getByLabel('Theme',{exact:true}).selectOption('light');
  await page.reload();
  await expect(page.locator('html')).toHaveAttribute('data-curation-theme','light');
+ await expect(page.getByRole('region',{name:'Frozen version'})).toBeVisible();
+ await page.getByRole('button',{name:'Library',exact:true}).click();
+ await page.getByLabel('Search recorded episodes').fill('fixture');
+ await page.getByRole('button',{name:'Search',exact:true}).click();
+ await expect(page.locator('.cu-link')).toHaveCount(1);
+ await page.getByLabel('Search recorded episodes').fill('unsubmitted-query');
+ await expect(page).toHaveURL(/q=fixture/);
+ await page.getByLabel('Add episodes to').selectOption(exported.collection.id);
+ await page.getByRole('button',{name:'Add to collection',exact:true}).click();
+ await expect(page.getByText('Added to Browser fixture collection',{exact:true})).toBeVisible();
+ const saved=await (await context.request.get('http://127.0.0.1:'+port+'/api/v1/collections/'+exported.collection.id)).json();
+ if(saved.selection[exported.episodes[0].id].text!=='fixture')throw new Error('Unsubmitted query leaked into selection provenance');
+ await page.locator('.cu-link').focus();await page.keyboard.press('Enter');
+ await expect(page.locator('#episode-heading')).toBeFocused();
+ await page.getByRole('button',{name:'← Back to Library',exact:true}).click();
+ await expect(page.locator('.cu-link')).toBeFocused();
  if(errors.length)throw new Error(errors.join('\n'));
  console.log('Browser QA passed: themes, keyboard, real fixture import/playback, source-backed seeking, interval review/selection, immutable export and reload; no page errors.');
+}catch(error){
+ await page.screenshot({path:'artifacts/curation/browser-failure.png',fullPage:true});
+ console.error((await page.locator('body').innerText()).slice(-12000));
+ throw error;
 }finally{
  if(worker&&worker.exitCode===null){worker.kill();await once(worker,'exit');}
  await context.close();
