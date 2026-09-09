@@ -24,6 +24,13 @@ export class Store {
   all<T=any>(kind:string):T[] {
     return this.db.prepare('SELECT data FROM records WHERE kind=? ORDER BY rowid DESC').all(kind).map(r=>JSON.parse(String(r.data)));
   }
+  page<T=any>(kind:string,limit=40,offset=0):T[] {
+    return this.db.prepare('SELECT data FROM records WHERE kind=? ORDER BY rowid DESC LIMIT ? OFFSET ?')
+      .all(kind,limit,offset).map(r=>JSON.parse(String(r.data)));
+  }
+  count(kind:string):number {
+    return Number(this.db.prepare('SELECT count(*) AS n FROM records WHERE kind=?').get(kind)?.n??0);
+  }
   put(kind:string,key:string,value:unknown) {
     this.db.prepare('INSERT INTO records VALUES (?,?,?) ON CONFLICT(kind,id) DO UPDATE SET data=excluded.data').run(kind,key,JSON.stringify(value));
   }

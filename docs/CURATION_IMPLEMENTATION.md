@@ -104,7 +104,13 @@ Do not add `-v` unless intentionally deleting persisted data.
 
 This preview is **local-only**. Do not bind the port publicly or use
 `CURATION_CONTAINER_LOCAL=1` outside the supplied loopback-published container
-configuration. Remote HTTPS/operator authentication is not implemented.
+configuration. Optional HTTPS/operator authentication is implemented but has not
+been qualified on a deployed HTTPS host. Set CURATION_PUBLIC_ORIGIN to the exact
+HTTPS origin (no trailing slash) and CURATION_OPERATOR_TOKEN to a random secret
+of at least 32 characters. A local reverse proxy must preserve Host and set
+X-Forwarded-Proto to https; do not expose the backend directly. Login issues an
+eight-hour HttpOnly, Secure, SameSite=Strict cookie covering API and media reads.
+Keep proxy/backend access private; container-local mode trusts its private network.
 Cloud instances still incur charges until stopped/deleted through the provider;
 the application does not manage that lifecycle. Nothing has been provisioned.
 
@@ -144,13 +150,16 @@ Still required before claiming specification 0.3.0 acceptance:
 - A shared timeline with verified mappings where available. Paged state/action
   sample inspection preserves original timestamps without interpolation;
   camera views play independently, explicitly without cross-clock guarantees.
-- Cross-version provenance comparison, all structured filters and pagination of
-  every metadata resource.
-- Schemas for all worker result variants, byte quotas during writes, append-only source
-  revision enforcement, job attempt history and restart/fault-injection coverage.
+- Browser presentation of cross-version comparisons and pagination controls for
+  every metadata resource. APIs now support version diffs, bounded source/job/
+  collection listings, and source, task, split, robot, modality, source-label,
+  current review-role and integrity filters.
+- Byte quotas during writes, append-only source revision enforcement and broader
+  restart/fault-injection coverage. Worker completion variants now have schemas;
+  stale-lease recovery retains attempt events and rejects late results.
 - Full media decode validation; ffprobe is a container/stream probe, not proof
   that every frame decodes.
-- Remote HTTPS/operator authentication, Docker smoke test and tested restore.
+- Deployed HTTPS qualification, Docker smoke test and tested restore.
 - Named-host import/memory/storage/query/preview measurements on actual data.
 - The frozen 20-question manually reviewed retrieval pilot.
 

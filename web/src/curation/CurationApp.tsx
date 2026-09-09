@@ -9,6 +9,15 @@ async function api(url:string,body?:unknown,method=body?'POST':'GET'){
  const data=await response.json();if(!response.ok)throw new Error(data.error);return data;
 }
 export default function CurationApp(){
+ const [authenticated,setAuthenticated]=useState<boolean|null>(null),[error,setError]=useState('');
+ useEffect(()=>{void api('/auth').then(result=>setAuthenticated(result.authenticated)).catch(e=>setError(e.message));},[]);
+ if(authenticated)return <CurationWorkspace/>;
+ return <main className="cu-app"><section className="cu-panel"><h1>Evidence workspace</h1>
+ {authenticated===null?<p>Checking access…</p>:<form onSubmit={event=>{event.preventDefault();const form=new FormData(event.currentTarget);void api('/auth',{token:form.get('token')}).then(()=>setAuthenticated(true)).catch(e=>setError(e.message));}}>
+ <label>Operator token<input name="token" type="password" autoComplete="current-password" required/></label><button>Unlock workspace</button></form>}
+ {error&&<p role="alert">{error}</p>}</section></main>;
+}
+function CurationWorkspace(){
  const [page,setPage]=useState<'library'|'collections'>('library');
  const [sources,setSources]=useState<Source[]>([]),[episodes,setEpisodes]=useState<Episode[]>([]);
  const [collections,setCollections]=useState<Collection[]>([]),[jobs,setJobs]=useState<Job[]>([]);
@@ -17,8 +26,9 @@ export default function CurationApp(){
  const [error,setError]=useState(''),[notice,setNotice]=useState(''),[register,setRegister]=useState(false);
  const [busy,setBusy]=useState(false),[offset,setOffset]=useState(0);
  const [destination,setDestination]=useState('');
+ const [filters,setFilters]=useState<Record<string,string>>({});
  async function refresh(){const [s,c,j]=await Promise.all([api('/sources'),api('/collections'),api('/jobs')]);setSources(s);setCollections(c);setJobs(j);}
- async function search(start=0){const result=await api('/queries',{text,mode,offset:start});setEpisodes(result.episodes);setOffset(start);}
+ async function search(start=0){const result=await api('/queries',{text,mode,offset:start,...Object.fromEntries(Object.entries(filters).filter(([,v])=>v))});setEpisodes(result.episodes);setOffset(start);}
  async function run(fn:()=>Promise<void>){setError('');setBusy(true);try{await fn();await refresh();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  useEffect(()=>{void run(async()=>{await search();});const timer=setInterval(()=>{void refresh().catch(e=>setError(e.message));},3000);return()=>clearInterval(timer);},[]);
  const form=(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();return new FormData(event.currentTarget);};
@@ -63,6 +73,13 @@ export default function CurationApp(){
  <form className="cu-search" onSubmit={e=>{e.preventDefault();void run(()=>search());}}><label className="cu-grow">Search recorded episodes<input value={text} onChange={e=>setText(e.target.value)} placeholder="Task, robot, split…"/></label>
  <label>Search fields<select value={mode} onChange={e=>setMode(e.target.value)}><option value="metadata">Metadata only</option><option value="annotations">Annotation-assisted</option></select></label><button disabled={busy}>Search</button></form>
  <p className="cu-muted">{mode==='metadata'?'Searches task identifiers, robot and split. Not label-hidden prediction.':'Includes source task text, source labels and reviewer judgments. Not automatic failure detection.'}</p>
+ <details className="cu-panel"><summary>Structured filters</summary><div className="cu-grid">
+ <label>Dataset source<select value={filters.source_id??''} onChange={e=>setFilters({...filters,source_id:e.target.value})}><option value="">All sources</option>{sources.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+ <label>Official split<select value={filters.split??''} onChange={e=>setFilters({...filters,split:e.target.value})}><option value="">All splits</option><option>test</option><option>normal_train</option></select></label>
+ {['task','robot','modality','source_label'].map(field=><label key={field}>{field.replace('_',' ')}<input value={filters[field]??''} onChange={e=>setFilters({...filters,[field]:e.target.value})}/></label>)}
+ <label>Reviewed role<select value={filters.reviewed_role??''} onChange={e=>setFilters({...filters,reviewed_role:e.target.value})}><option value="">Any role</option>{REVIEW_ROLES.map(role=><option key={role}>{role}</option>)}</select></label>
+ <label>Integrity<select value={filters.integrity??''} onChange={e=>setFilters({...filters,integrity:e.target.value})}><option value="">Any findings</option><option value="findings">Findings present</option><option value="no-findings">No import findings</option></select></label>
+ </div><p>Source-label and reviewed-role filters use annotations even when text search is metadata-only.</p><button onClick={()=>void run(()=>search())}>Apply filters</button></details>
  <section className="cu-panel"><div className="cu-table-head"><h2>Episodes</h2><span>{episodes.length} in this page</span></div>
  <label>Add episodes to<select value={destination} onChange={e=>setDestination(e.target.value)}><option value="">Choose collection</option>{collections.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
  {!episodes.length?<div className="cu-empty"><h3>Start with a small, recorded task.</h3><p>Register a snapshot, inspect its byte estimate, then explicitly import it.</p></div>:<div className="cu-scroll"><table><thead><tr><th>Task / episode</th><th>Split</th><th>Evidence</th><th>Review</th></tr></thead><tbody>{episodes.map(e=><tr key={e.id}><td><button className="cu-link" onClick={()=>void run(async()=>setSelected(await api('/episodes/'+e.id)))}>{e.task}<small>{e.source_episode} · {e.origin}</small></button></td><td>{e.split}</td><td>{e.streams.length} views · {e.findings.length} findings</td><td><button onClick={()=>void run(async()=>{

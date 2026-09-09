@@ -25,7 +25,8 @@ test('curation: durable reviews, immutable collections, bounded intervals, searc
  const job=(await call('/internal/claim',{},'POST',true)).data;
  assert.equal((await call('/internal/claim',{},'POST',true)).status,204);
  assert.equal((await call('/internal/jobs/'+job.id,{attempt:99},'POST',true)).status,409);
- await call('/internal/jobs/'+job.id,{attempt:job.attempt,status:'completed',result:{estimated_bytes:1,files:[],episodes:[],findings:[]}},'POST',true);
+ assert.equal((await call('/internal/jobs/'+job.id,{attempt:job.attempt,status:'completed',result:{estimated_bytes:1,files:[],episodes:[],findings:[]}},'POST',true)).status,400);
+ await call('/internal/jobs/'+job.id,{attempt:job.attempt,status:'completed',result:{estimated_bytes:0,files:[],episodes:[],findings:[]}},'POST',true);
  const episode={id:'e1',source_id:source.id,source_episode:'0',family_id:'family1',task:'coffee',split:'test',
  origin:'fixture',robot:'so100',duration:2,fps:30,frames:60,upstream_splits:{train:'0:1'},
  task_text:['hidden spilling annotation'],streams:[{id:'s1',kind:'video',artifact_id:'a1',timing:'unknown'}],
@@ -51,11 +52,25 @@ test('curation: durable reviews, immutable collections, bounded intervals, searc
  const version=(await call('/collections/'+c.id+'/versions',{})).data;
  const second=(await call('/episodes/e1/reviews',{role:'unknown',rationale:'updated fixture review',evidence:['a1']})).data;
  assert.equal(second.supersedes,first.id);
+ assert.equal((await call('/queries',{reviewed_role:'recovery'})).data.episodes.length,0);
+ assert.equal((await call('/queries',{reviewed_role:'unknown',robot:'so100',source_label:'spilling',integrity:'no-findings'})).data.episodes.length,1);
+ assert.equal((await call('/queries',{modality:'nonexistent'})).data.total,0);
+ const later=(await call('/collections/'+c.id+'/versions',{})).data;
+ assert.equal((await call('/collection-versions/'+version.id+'/compare/'+later.id)).data.reviews_added[0].id,second.id);
  assert.equal((await call('/collection-versions/'+version.id)).data.reviews.length,1);
  assert.equal((await call('/episodes/e1')).data.reviews.length,2);
  const exportJob=(await call('/collection-versions/'+version.id+'/exports',{})).data;
  await call('/jobs/'+exportJob.id+'/cancel',{});
  assert.equal((await call('/jobs/'+exportJob.id)).data.status,'cancelled');
+ const recovery=(await call('/collection-versions/'+version.id+'/exports',{})).data;
+ const leased=(await call('/internal/claim',{},'POST',true)).data;
+ assert.equal(leased.id,recovery.id);
+ store.put('job',leased.id,{...leased,updated_at:'2000-01-01T00:00:00.000Z'});
+ const resumed=(await call('/internal/claim',{},'POST',true)).data;
+ assert.equal(resumed.attempt,2);
+ assert.ok(resumed.history.some((h:any)=>h.status==='lease-expired'));
+ assert.equal((await call('/internal/jobs/'+leased.id,{attempt:1,status:'completed',result:{}},'POST',true)).status,409);
+ await call('/jobs/'+leased.id+'/cancel',{});
  const hostile=await fetch(url+'/api/v1/sources',{headers:{Origin:'https://hostile.example'}});
  assert.equal(hostile.status,403);
  assert.throws(()=>contained(path.join(root,'sources'),'../db/curation.sqlite'));
